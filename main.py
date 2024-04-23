@@ -613,7 +613,7 @@ class PirxcyProxy:
                     self.proxy_toggle()
                     self.mitmproxy_server.start()
                     await self.mitmproxy_server.stopped.wait()
-                except Exception as e:
+                except BaseException as e:
                     self.running = False
                     self.mitmproxy_server.stop()
                     self.proxy_toggle(enable=False)
