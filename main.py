@@ -408,7 +408,10 @@ class PirxcyProxy:
                 "https://raw.githubusercontent.com/PirxcyFinal/PirxcyProxyFinal/main/VERSION"
             ) as request:
                 response = await request.text()
+        try:
             self.appVersionServer = semver.Version.parse(response.strip())
+        except:
+            return False
 
         return self.appVersion < self.appVersionServer
 
