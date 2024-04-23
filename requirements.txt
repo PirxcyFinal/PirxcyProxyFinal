@@ -1,0 +1,10 @@
+mitmproxy
+semver
+survey
+ujson
+crayons
+console
+pypresence
+rich
+aiohttp
+aiofiles
