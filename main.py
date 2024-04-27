@@ -57,7 +57,7 @@ import xml.etree.ElementTree as ET
 
 
 from rich import print_json
-from console.utils import set_title
+from console.utils import set_title # type: ignore
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy import http
 from mitmproxy.options import Options as mitmoptions
@@ -68,7 +68,7 @@ appName = "PirxcyProxy"
 
 logger = logging.getLogger(appName)
 logger.setLevel(logging.INFO)
-logging.basicConfig(format=f"[{crayons.blue(appName)}] %(message)s")
+logging.basicConfig(format=f"[{crayons.blue(appName)}] %(message)s") # type: ignore
 
 
 itemTypeMap = {
@@ -107,6 +107,65 @@ itemTypeMap = {
     "building_set": "JunoBuildingSet",
     "building_prop": "JunoBuildingProp",
 }
+
+def cls():
+    os.system("cls" if os.name == "nt" else "clear")
+
+async def aprint(text: str, delay: float):
+    """
+    Asynchronously prints each character of the given text with a specified delay between characters.
+    (gives it a sexy animation)
+
+    Args:
+        text (str): The text to be printed.
+        delay (float): The delay in seconds between printing each character.
+
+    Returns:
+        None
+    """
+    for character in text:
+        sys.stdout.write(character)
+        sys.stdout.flush()
+        if character.isalpha():
+            await asyncio.sleep(delay)
+    sys.stdout.flush()
+    return print()
+
+def center(var: str, space: int | None = None):
+    if not space:
+        space = (
+            os.get_terminal_size().columns
+            - len(var.splitlines()[int(len(var.splitlines()) / 2)])
+        ) // 2
+    return "\n".join((" " * int(space)) + var for var in var.splitlines())
+
+def proxy_toggle(enable: bool=True):
+    # Open the key where proxy settings are stored
+    INTERNET_SETTINGS = winreg.OpenKey(
+        winreg.HKEY_CURRENT_USER,
+        r"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
+        0,
+        winreg.KEY_ALL_ACCESS,
+    )
+
+    def set_key(name: str, value: str | int):
+        try:
+            _, reg_type = winreg.QueryValueEx(INTERNET_SETTINGS, name)
+            winreg.SetValueEx(INTERNET_SETTINGS, name, 0, reg_type, value)
+        except FileNotFoundError:
+            # If the key does not exist, create it
+            winreg.SetValueEx(INTERNET_SETTINGS, name, 0, winreg.REG_SZ, value)
+
+        # Get current proxy enable status
+
+    proxy_enable = winreg.QueryValueEx(INTERNET_SETTINGS, "ProxyEnable")[0]
+
+    if proxy_enable == 0 and enable:
+        set_key("ProxyServer", "127.0.0.1:8080")
+        set_key("ProxyEnable", 1)
+    elif proxy_enable == 1 and not enable:
+        set_key("ProxyEnable", 0)
+        set_key("ProxyServer", "")
 class Addon:
     def __init__(self, server: "MitmproxyServer"):
         self.server = server
@@ -136,11 +195,10 @@ class Addon:
                 logger.info(f"Client Request: {flow.request.url}")
 
             """
-      if True:
-        nameOld,nameNew = list(nameId.items())[0]
-        flow.request.url = flow.request.url.replace(nameOld,nameNew)
-    
-      """
+            if True:
+                nameOld,nameNew = list(nameId.items())[0]
+                flow.request.url = flow.request.url.replace(nameOld,nameNew)
+            """
             if (".png" in url or ".jpg" in url or ".jpeg" in url) and (
                 ".epic" in url or ".unreal" in url or ".static" in url
             ):
@@ -188,8 +246,7 @@ class Addon:
 
             if (
                 "setloadoutshuffleenabled" in url.lower()
-                or "markitemseen" in url.lower()
-                and cosmetics
+                or "markitemseen" in url.lower() and cosmetics
                 or url
                 == "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
             ):
@@ -206,16 +263,14 @@ class Addon:
 
             elif (
                 "client/QueryProfile?profileId=athena" in url
-                or "client/QueryProfile?profileId=common_core" in url
-                or "client/ClientQuestLogin?profileId=athena" in url
-                and cosmetics
+                or "client/QueryProfile?profileId=common_core" in url or "client/ClientQuestLogin?profileId=athena" in url and cosmetics
             ):
                 if not flow.response: raise TypeError
                 text = flow.response.get_text()
                 if not text: raise TypeError
                 athenaFinal = ujson.loads(text)
                 athenaFinal["profileChanges"][0]["profile"]["items"].update(
-                    athena
+                    self.athena
                 )  # Add items to current athena
                 flow.response.text = ujson.dumps(athenaFinal)
 
@@ -259,6 +314,7 @@ class Addon:
 
             if "/lfg/fortnite/tags" in url.lower() and invite:
                 self.server.app.config["users"]
+                if flow.response is None: raise TypeError
                 flow.response.text = ujson.dumps({"users": users})
                 logger.info(url)
 
@@ -292,7 +348,7 @@ class MitmproxyServer:
                 loop=self.loop,
                 with_termlog=False,
             )
-            self.m.addons.add(Addon(self))
+            self.m.addons.add(Addon(self)) # type: ignore
         except KeyboardInterrupt:
             pass
 
@@ -311,6 +367,7 @@ class MitmproxyServer:
         set_title(f"{appName} (CTRL+C To Close Proxy)")
         try:
             self.run_mitmproxy()
+            proxy_toggle(True)
             logger.info("Proxy Online")
         except TypeError:
             if self.task:
@@ -326,7 +383,7 @@ class MitmproxyServer:
         except AssertionError:
             return "Unable to Close Proxy"
 
-        self.app.proxy_toggle(enable=False)
+        proxy_toggle(enable=False)
         return True
 
 
@@ -364,25 +421,6 @@ class PirxcyProxy:
 
         if self.config.get("EveryCosmetic", False): self.athena = await self.buildAthena()
 
-    async def aprint(self, text: str, delay: float):
-        """
-        Asynchronously prints each character of the given text with a specified delay between characters.
-        (gives it a sexy animation)
-
-        Args:
-          text (str): The text to be printed.
-          delay (float): The delay in seconds between printing each character.
-
-        Returns:
-          None
-        """
-        for character in text:
-            sys.stdout.write(character)
-            sys.stdout.flush()
-            if character.isalpha():
-                await asyncio.sleep(delay)
-        sys.stdout.flush()
-        return print()
 
     async def needsUpdate(self):
         """
@@ -441,7 +479,7 @@ class PirxcyProxy:
         """
         try:
 
-            await self.RPC.update(
+            await self.RPC.update( # type: ignore
                 state=state,
                 buttons=[
                     {
@@ -465,42 +503,6 @@ class PirxcyProxy:
             pass
 
         return
-
-    def proxy_toggle(self, enable: bool=True):
-        # Open the key where proxy settings are stored
-        INTERNET_SETTINGS = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings",
-            0,
-            winreg.KEY_ALL_ACCESS,
-        )
-
-        def set_key(name: str, value: str | int):
-            try:
-                _, reg_type = winreg.QueryValueEx(INTERNET_SETTINGS, name)
-                winreg.SetValueEx(INTERNET_SETTINGS, name, 0, reg_type, value)
-            except FileNotFoundError:
-                # If the key does not exist, create it
-                winreg.SetValueEx(INTERNET_SETTINGS, name, 0, winreg.REG_SZ, value)
-
-            # Get current proxy enable status
-
-        proxy_enable = winreg.QueryValueEx(INTERNET_SETTINGS, "ProxyEnable")[0]
-
-        if proxy_enable == 0 and enable:
-            set_key("ProxyServer", "127.0.0.1:8080")
-            set_key("ProxyEnable", 1)
-        elif proxy_enable == 1 and not enable:
-            set_key("ProxyEnable", 0)
-            set_key("ProxyServer", "")
-
-    def center(self, var: str, space: int | None = None):
-        if not space:
-            space = (
-                os.get_terminal_size().columns
-                - len(var.splitlines()[int(len(var.splitlines()) / 2)])
-            ) // 2
-        return "\n".join((" " * int(space)) + var for var in var.splitlines())
 
     def title(self):
         """
@@ -529,16 +531,16 @@ class PirxcyProxy:
     """
         faded = ""
         red = 29
-        for line in self.center(text).splitlines():
+        for line in center(text).splitlines():
             faded += f"\033[38;2;{red};0;220m{line}\033[0m\n"
             if not red == 255:
                 red += 15
                 if red > 255:
                     red = 255
-        os.system("cls")
+        cls()
         print(faded)
-        print(self.center(f"{appName} v{self.appVersion}"))
-        print(self.center(f"Made by {self.appauthor}"))
+        print(center(f"{appName} v{self.appVersion}"))
+        print(center(f"Made by {self.appauthor}"))
         print()
 
     async def buildAthena(self):
@@ -605,19 +607,18 @@ class PirxcyProxy:
         match option:
             case "SET_PROXY_TASK":
                 if self.running:
-                    self.proxy_toggle(enable=False)
                     return self.mitmproxy_server.stop()
 
                 try:
-                    set_title(f"{appName} (CTRL+C To Close Proxy)")
-                    self.proxy_toggle()
                     self.mitmproxy_server.start()
                     await self.mitmproxy_server.stopped.wait()
                 except BaseException as e:
                     self.running = False
                     self.mitmproxy_server.stop()
-                    self.proxy_toggle(enable=False)
                     return e
+            case "EXIT_TASK":
+                cls()
+                sys.exit(0)
             case _: pass
 
     async def checks(self):
@@ -632,10 +633,10 @@ class PirxcyProxy:
             sys.exit(1)
 
     async def main(self):
-        self.cls()
+        cls()
         await self.checks()
-        await self.aprint(
-            self.center(crayons.blue(f"Starting  {appName}...")), delay=0.089
+        await aprint(
+            center(crayons.blue(f"Starting  {appName}...")), delay=0.089 # type: ignore
         )
 
         error = None
@@ -655,7 +656,7 @@ class PirxcyProxy:
                 sys.exit(1)
 
             choices = self.options()
-            index: int = survey.routines.select(
+            index: int = survey.routines.select( # type: ignore
                 f"Welcome to {appName}\nChoose an option:",
                 options=list(choices.keys()),
                 focus_mark="➤ ",
@@ -667,9 +668,6 @@ class PirxcyProxy:
                 error = await self.exec_command(command)
             except Exception as e:
                 error = e
-
-    def cls(self):
-        os.system("cls" if os.name == "nt" else "clear")
 
     def run(self):
         return self.main()
