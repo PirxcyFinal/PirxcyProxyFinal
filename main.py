@@ -392,9 +392,10 @@ class PirxcyProxy:
 
         # Set all configurations to false before reading config
         self.running = False
-        self.nameId: dict[str, str] = {}
-        self.playlistId: dict[str, str] = {}
         self.name = False
+        self.nameId: dict[str, str] = {}
+        self.playlist = False
+        self.playlistId: dict[str, str] = {}
 
         self.config: dict[str, Any] = {}
 
