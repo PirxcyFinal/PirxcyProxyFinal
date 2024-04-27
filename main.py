@@ -25,20 +25,6 @@ SOFTWARE.
 # Well then, I guess PirxcyProxy is now open source (due to virus accusations).
 # If you're gonna skid, i suggest you get some bitches first 😘
 
-# unused imports
-
-# import mitmproxy
-# import threading
-# import colorama
-# import requests
-# import re
-# import datetime
-# import time
-# from uuid import uuid4 as uuid
-# from mitmproxy import flow
-# from mitmproxy import ctx
-# from mitmproxy.tools.main import mitmweb
-
 import os
 from typing import Any
 import semver
@@ -166,6 +152,7 @@ def proxy_toggle(enable: bool=True):
     elif proxy_enable == 1 and not enable:
         set_key("ProxyEnable", 0)
         set_key("ProxyServer", "")
+
 class Addon:
     def __init__(self, server: "MitmproxyServer"):
         self.server = server
@@ -183,9 +170,9 @@ class Addon:
             if (
                 "https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/matchmakingservice/ticket/player"
                 in flow.request.pretty_url
-                and playlist
+                and self.server.app.playlist
             ):
-                playlistOld, playlistNew = list(playlistId.items())[0]
+                playlistOld, playlistNew = list(self.server.app.playlistId.items())[0]
                 flow.request.url = flow.request.url.replace(
                     "%3A" + playlistOld, "%3A" + playlistNew
                 )
@@ -194,11 +181,10 @@ class Addon:
             if "/client/" in flow.request.url:
                 logger.info(f"Client Request: {flow.request.url}")
 
-            """
-            if True:
-                nameOld,nameNew = list(nameId.items())[0]
-                flow.request.url = flow.request.url.replace(nameOld,nameNew)
-            """
+            if self.server.app.name:
+                nameOld, nameNew = list(self.server.app.nameId.items())[0]
+                flow.request.url = flow.request.url.replace(nameOld, nameNew)
+
             if (".png" in url or ".jpg" in url or ".jpeg" in url) and (
                 ".epic" in url or ".unreal" in url or ".static" in url
             ):
@@ -223,19 +209,21 @@ class Addon:
             if msg.startswith("<presence><status>") and msg.endswith("</presence>"):
                 root = ET.fromstring(msg)
                 status_element = root.find("status")
-                if not status_element or not status_element.text: raise TypeError
+                if status_element is None or status_element.text is None: raise TypeError
                 json_data = ujson.loads(status_element.text)
 
                 # Change the status
                 currentStatus = json_data["Status"]
-                json_data["Status"] = currentStatus + f"@ {appName} 🤖"
+                json_data["Status"] = (
+                    "🤖 " + currentStatus + f"@ {appName} 🤖"
+                )
 
                 new_json_text = ujson.dumps(json_data)
                 status_element.text = new_json_text
                 new_xml_data = ET.tostring(root)
 
                 flow.websocket.messages[-1].content = new_xml_data
-            if wslog:
+            if self.server.app.config.get("WebSocketLogging", False):
                 # XMPP LOG
                 logger.info("XMPP:")
                 print_json(data=str(flow.websocket.messages[-1])[1:-1])
@@ -246,7 +234,7 @@ class Addon:
 
             if (
                 "setloadoutshuffleenabled" in url.lower()
-                or "markitemseen" in url.lower() and cosmetics
+                and self.server.app.config.get("EveryCosmetic", False)
                 or url
                 == "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
             ):
@@ -263,24 +251,26 @@ class Addon:
 
             elif (
                 "client/QueryProfile?profileId=athena" in url
-                or "client/QueryProfile?profileId=common_core" in url or "client/ClientQuestLogin?profileId=athena" in url and cosmetics
+                or "client/QueryProfile?profileId=common_core" in url
+                or "client/ClientQuestLogin?profileId=athena" in url
+                and self.server.app.cosmetics
             ):
-                if not flow.response: raise TypeError
+                if flow.response is None: raise TypeError
                 text = flow.response.get_text()
-                if not text: raise TypeError
+                if text is None: raise TypeError
                 athenaFinal = ujson.loads(text)
                 athenaFinal["profileChanges"][0]["profile"]["items"].update(
-                    self.athena
+                    self.server.app.athena
                 )  # Add items to current athena
                 flow.response.text = ujson.dumps(athenaFinal)
 
             if (
                 "https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/matchmakingservice/ticket/player"
                 in flow.request.pretty_url
-                and playlist
+                and self.server.app.playlist
             ):
                 logger.info("Matchmaking:")
-                if not flow.response: raise TypeError
+                if flow.response is None: raise TypeError
                 print_json(flow.response.text)  # Return matchmaking info.
 
             if "/lightswitch/api/service/bulk/status" in url.lower():
@@ -302,18 +292,19 @@ class Addon:
                     }
                 ]
                 dump = ujson.dumps(status)
-                if not flow.response: raise TypeError
+                if flow.response is None: raise TypeError
                 flow.response.text = dump
 
-            """
-      if name:
-        # Replace Old Name with New Name
-        nameOld,nameNew = list(nameId.items())[0]
-        flow.response.text = flow.response.get_text().replace(nameOld,nameNew)
-      """
+            if self.server.app.name:
+                # Replace Old Name with New Name
+                nameOld, nameNew = list(self.server.app.nameId.items())[0]
+                if flow.response is not None and flow.response.text is not None:
+                    flow.response.text = flow.response.text.replace(
+                        nameOld, nameNew
+                    )
 
             if "/lfg/fortnite/tags" in url.lower() and invite:
-                self.server.app.config["users"]
+                self.server.app.config["InviteExploit"]["users"]
                 if flow.response is None: raise TypeError
                 flow.response.text = ujson.dumps({"users": users})
                 logger.info(url)
@@ -365,6 +356,7 @@ class MitmproxyServer:
     def start(self):
         self.running = True
         set_title(f"{appName} (CTRL+C To Close Proxy)")
+        # asyncio.create_task(app.updateRPC(state="Running Proxy"))
         try:
             self.run_mitmproxy()
             proxy_toggle(True)
@@ -400,6 +392,9 @@ class PirxcyProxy:
 
         # Set all configurations to false before reading config
         self.running = False
+        self.nameId: dict[str, str] = {}
+        self.playlistId: dict[str, str] = {}
+        self.name = False
 
         self.config: dict[str, Any] = {}
 
@@ -484,12 +479,8 @@ class PirxcyProxy:
                 buttons=[
                     {
                         "label": appName,
-                        "url": "https://github.com/PirxcyFinal/PirxcyProxy/",
-                    },
-                    {
-                        "label": "Releases (Download)",
-                        "url": "https://github.com/PirxcyFinal/PirxcyProxy/releases",
-                    },
+                        "url": "https://github.com/PirxcyFinal/PirxcyProxyFinal/",
+                    }
                 ],
                 details=f"{appName} v{self.appVersion}",
                 large_image=("https://cdnv2.boogiefn.dev/newB.gif"),
@@ -578,25 +569,19 @@ class PirxcyProxy:
 
     def options(self):
         return {
-            "Disable Proxy" if self.ProxyEnabled else "Enable Proxy": "SET_PROXY_TASK",
+            (
+                "Enable Proxy" if not self.ProxyEnabled else "Disable Proxy"
+            ): "SET_PROXY_TASK",
             (
                 "Configure Custom Display Name"
-                if False
+                if not self.name
                 else "Remove Display Name Configuration"
             ): "SET_NAME_TASK",
             (
-                "Configure Playlist Swap" if False else "Remove Playlist Configuration"
+                "Configure Playlist Swap"
+                if not self.playlist
+                else "Remove Playlist Configuration"
             ): "SET_PLAYLIST_TASK",
-            (
-                "Disable Invite Exploit"
-                if self.config.get("InviteExploit", False)
-                else "Enable Invite Exploit"
-            ): "SET_INVITE_TASK",
-            (
-                "Disable Websocket Logging"
-                if self.config.get("WebSocketLogging", False)
-                else "Enable Websocket Logging"
-            ): "SET_WS_LOG",
             f"Exit {appName}": "EXIT_TASK",
         }
 
@@ -616,6 +601,25 @@ class PirxcyProxy:
                     self.running = False
                     self.mitmproxy_server.stop()
                     return e
+
+            case "SET_NAME_TASK":
+                self.name = not self.name
+                if not self.name:
+                    self.nameId = {}
+                    return
+                old = input(f"[+] Current Name: ")
+                new = input(f"[+] Enter New Display Name to Replace {old}: ")
+                self.nameId[old] = new
+
+            case "SET_PLAYLIST_TASK":
+                self.playlist = not self.playlist
+                if not self.playlist:
+                    self.playlistId = {}
+                    return
+                new = input(
+                    f"[+] Enter New Playlist To Overide {self.config.get("Playlist", "")}: "
+                )
+                self.playlistId[self.config.get("Playlist", "")] = new
             case "EXIT_TASK":
                 cls()
                 sys.exit(0)
