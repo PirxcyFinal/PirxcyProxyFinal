@@ -97,6 +97,11 @@ itemTypeMap = {
 def cls():
   os.system("cls" if os.name == "nt" else "clear")
 
+def readConfig():
+  with open("config.json") as f:
+    config = ujson.loads(f.read())
+    return config
+
 async def aprint(text: str, delay: float):
   """
   Asynchronously prints each character of the given text with a specified delay between characters.
@@ -209,13 +214,12 @@ class Addon:
       if msg.startswith("<presence><status>") and msg.endswith("</presence>"):
         root = ET.fromstring(msg)
         status_element = root.find("status")
-        if status_element is None or status_element.text is None: raise TypeError
         json_data = ujson.loads(status_element.text)
 
         # Change the status
         currentStatus = json_data["Status"]
         json_data["Status"] = (
-          f"@ {appName} 🤖"
+          f"Using {appName} 🤖"
         )
 
         new_json_text = ujson.dumps(json_data)
@@ -223,7 +227,7 @@ class Addon:
         new_xml_data = ET.tostring(root)
 
         flow.websocket.messages[-1].content = new_xml_data
-      if self.server.app.config.get("WebSocketLogging", False):
+      if self.server.app.config.get("WebSocketLogging"):
         # XMPP LOG
         logger.info("XMPP:")
         print_json(data=str(flow.websocket.messages[-1])[1:-1])
@@ -292,8 +296,9 @@ class Addon:
             nameOld, nameNew
           )
 
-      if "/lfg/fortnite/tags" in url.lower() and invite:
-        self.server.app.config["InviteExploit"]["users"]
+      if "/lfg/fortnite/tags" in url.lower() and self.server.app.InviteExploit:
+        users = readConfig()
+        users = users["InviteExploit"]["users"]
         flow.response.text = ujson.dumps({"users": users})
         logger.info(url)
 
@@ -393,6 +398,9 @@ class PirxcyProxy:
     except: 
       pass
     
+    if self.config["InviteExploit"].get("enabled"):
+      self.InviteExploit = True
+    
     if self.config.get("EveryCosmetic"): 
       self.athena = await self.buildAthena()
 
@@ -428,6 +436,7 @@ class PirxcyProxy:
 
     return self.appVersion < self.appVersionServer
 
+
   async def connectRPC(self):
     try:
       self.RPC = AioPresence(client_id=self.client_id, loop=self.loop)
@@ -459,7 +468,7 @@ class PirxcyProxy:
         buttons=[
           {
             "label": appName,
-            "url": "https://github.com/PirxcyFinal/PirxcyProxyFinal/",
+            "url": f"https://github.com/PirxcyFinal/{appname}/",
           }
         ],
         details=f"{appName} v{self.appVersion}",
@@ -611,6 +620,9 @@ class PirxcyProxy:
 
   async def checks(self):
     logger.info("Performing Checks... (this shit should be quick)")
+
+
+    
 
     needs_update = await self.needsUpdate()
     if needs_update:
