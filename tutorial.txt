@@ -1,3 +1,6 @@
 Ensure you have a python installation of 3.10 or higher, then double click the START.bat file
 
+press enable proxy
+then launch fortnite
+
 if you run into problems message me on discord @pirxcy
