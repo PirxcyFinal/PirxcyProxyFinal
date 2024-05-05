@@ -535,6 +535,9 @@ class PirxcyProxy:
         response = await request.json()
 
     base = {}
+    if response['result'] == False:
+      return print("No FortniteAPI key was provided. Please obtain one at https://fortniteapi.io/")
+
     for item in response["items"]:
 
       if item.get("styles"): 
