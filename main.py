@@ -524,19 +524,27 @@ class PirxcyProxy:
     print()
 
   async def buildAthena(self):
+    with open('config.json', 'r') as f:
+        data = ujson.load(f)
     set_title(f"{appName} Storing Cosmetics")
     asyncio.create_task(self.updateRPC(state="Storing Cosmetics"))
-
     async with aiohttp.ClientSession() as session:
       async with session.get(
         "https://fortniteapi.io/v2/items/list",
-        headers={"Authorization": self.config.get("apiKey")},
+        headers={"Authorization": data["apiKey"]},
       ) as request:
         response = await request.json()
 
     base = {}
     if response['result'] == False:
-      return print("No FortniteAPI key was provided. Please obtain one at https://fortniteapi.io/")
+      print("No FortniteAPI key was provided. Please obtain one at https://fortniteapi.io/")
+      key_input = input("FortniteAPI Key: ")
+      with open('config.json', 'r') as f:
+        data = ujson.load(f)
+      data['apiKey'] = key_input
+      with open('config.json', 'w') as f:
+        ujson.dump(data, f, indent=4)
+      return await self.buildAthena()
 
     for item in response["items"]:
 
