@@ -33,6 +33,7 @@ import aiohttp
 import asyncio
 import traceback
 import ujson
+import random
 import crayons
 import logging
 import winreg
@@ -40,7 +41,6 @@ import sys
 import aiofiles
 
 import xml.etree.ElementTree as ET
-
 
 from rich import print_json
 from console.utils import set_title # type: ignore
@@ -61,11 +61,11 @@ itemTypeMap = {
   "emote": "AthenaDance",
   "backpack": "AthenaBackpack",
   "outfit": "AthenaCharacter",
-  "toy": "AthenaToy",
+  "toy": "AthenaDance",
   "glider": "AthenaGlider",
-  "emoji": "AthenaEmoji",
+  "emoji": "AthenaDance",
   "pet": "AthenaPetCarrier",
-  "spray": "AthenaSpray",
+  "spray": "AthenaDance",
   "music": "AthenaMusicPack",
   "bannertoken": "BannerToken",
   "contrail": "AthenaSkyDiveContrail",
@@ -219,7 +219,7 @@ class Addon:
         # Change the status
         currentStatus = json_data["Status"]
         json_data["Status"] = (
-          f"Using {appName} 🤖"
+          f"{appName} Client🤖\n by {self.server.app.appauthor.get('name')}"
         )
 
         new_json_text = ujson.dumps(json_data)
@@ -237,8 +237,8 @@ class Addon:
       url = flow.request.pretty_url
 
       if (
-        "setloadoutshuffleenabled" in url.lower()
-        and self.server.app.config.get("EveryCosmetic")
+        ("setloadoutshuffleenabled" in url.lower()
+        or "markitemseen" in url.lower()) and self.server.app.config.get("EveryCosmetic")
         or url
         == "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
       ):
@@ -265,7 +265,21 @@ class Addon:
         and self.server.app.playlist
       ):
         logger.info("Matchmaking:")
-        print_json(flow.response.text)  # Return matchmaking info.
+        print_json(flow.response.text) # Return matchmaking info.
+
+      if "/entitlement/api/account/" in url.lower():
+        flow.response.text = flow.response.text.replace(
+          "BANNED",
+          "ACTIVE"#Allows banned users to log into Fortnite, or any EpicGames Game the user is banned on.
+        )
+
+
+      if url.startswith("https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/storeaccess/v1/request_access/"):
+        accountId = url.split("/")[1:]
+        flow.request.url = flow.request.url.replace(
+          accountId,
+          "4735ce9132924caf8a5b17789b40f79c"#Ninja's AccountID
+        )
 
       if "/lightswitch/api/service/bulk/status" in url.lower():
         # Launch Fortnite During Downtimes.
@@ -276,7 +290,10 @@ class Addon:
             "message": "fortnite is up.",
             "maintenanceUri": None,
             "overrideCatalogIds": ["a7f138b2e51945ffbfdacc1af0541053"],
-            "allowedActions": ["PLAY", "DOWNLOAD"],
+            "allowedActions": [
+              "PLAY",
+              "DOWNLOAD"
+            ],
             "banned": False,
             "launcherInfoDTO": {
               "appName": "Fortnite",
@@ -293,7 +310,8 @@ class Addon:
         nameOld, nameNew = list(self.server.app.nameId.items())[0]
         if flow.response is not None and flow.response.text is not None:
           flow.response.text = flow.response.text.replace(
-            nameOld, nameNew
+            nameOld,
+            nameNew
           )
 
       if "/lfg/fortnite/tags" in url.lower() and self.server.app.InviteExploit:
@@ -307,7 +325,11 @@ class Addon:
 
 
 class MitmproxyServer:
-  def __init__(self, app: "PirxcyProxy", loop: asyncio.AbstractEventLoop):
+  def __init__(
+    self,
+    app: "PirxcyProxy",
+    loop: asyncio.AbstractEventLoop
+  ):
     try:
       self.app = app
       self.loop = loop
@@ -335,6 +357,13 @@ class MitmproxyServer:
       set_title(f"{appName} (CTRL+C To Close Proxy)")
       # asyncio.create_task(app.updateRPC(state="Running Proxy"))
       logger.info("Proxy Online")
+      startupTasks = [
+        "taskkill /im FortniteLauncher.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping.exe /F"
+      ]
+      for task in startupTasks:
+        os.system(task)
       self.task = asyncio.create_task(self.m.run())
     except KeyboardInterrupt:
       pass
@@ -346,7 +375,6 @@ class MitmproxyServer:
     try:
       self.run_mitmproxy()
       proxy_toggle(True)
-      logger.info("Proxy Online")
     except TypeError:
       if self.task:
         self.task.cancel()
@@ -366,15 +394,43 @@ class MitmproxyServer:
 
 
 class PirxcyProxy:
-  def __init__(self, loop: asyncio.AbstractEventLoop | None=None, configFile: str = "config.json", client_id: int=1228345213161050232):
+  def __init__(
+    self,
+    loop: asyncio.AbstractEventLoop | None=None,
+    configFile: str = "config.json",
+    client_id=1228345213161050232
+  ):
     self.loop = loop or asyncio.get_event_loop()
     self.ProxyEnabled = False
     self.configFile = configFile
-    self.appauthor = "@pirxcy on Discord"
-    self.contributors = ["@kikodev"]
-    self.appVersion = semver.Version.parse("2.0.0")
+    self.state = ""
+    self.appauthor = {
+      "name": "pirxcy",
+      "Discord": "pirxcy",
+      "GitHub": "PirxcyFinal"
+    }
+    self.contributors = [
+      {
+        "name": "Kiko",
+        "Discord": "kikodev",
+        "GitHub": "HyperKiko"
+      },
+      {
+        "name": "The guy that loves kpop a bit toooo much",
+        "Discord": "sochieese",
+        "GitHub": "sochieese"
+      }
+    ]
+    self.updateFiles = [
+      "main.py",
+      "requirements.txt"
+    ]
+    self.appVersion = semver.Version.parse("2.1.0")
     self.client_id = client_id
-    self.mitmproxy_server = MitmproxyServer(app=self, loop=self.loop)
+    self.mitmproxy_server = MitmproxyServer(
+      app=self,
+      loop=self.loop
+    )
 
     # Set all configurations to false before reading config
     self.running = False
@@ -391,6 +447,9 @@ class PirxcyProxy:
     Async initializer
     """
     asyncio.create_task(self.connectRPC())
+    state = "Starting..."
+    self.state = state
+    asyncio.create_task(self.updateRPC(state=state))
 
     try:
       async with aiofiles.open(self.configFile) as f:
@@ -400,8 +459,10 @@ class PirxcyProxy:
     
     if self.config["InviteExploit"].get("enabled"):
       self.InviteExploit = True
+      #Enable InviteExploit if enabled in the config
     
-    if self.config.get("EveryCosmetic"): 
+    if self.config.get("EveryCosmetic"):
+      #Do the same for EveryCosmetic
       self.athena = await self.buildAthena()
 
 
@@ -421,12 +482,12 @@ class PirxcyProxy:
       ValueError: If the version number retrieved from the server is not a valid float.
     """
 
-    if self.config.get("updateSkip", False):
+    if not self.config.get("updateSkip"):
       return False
 
     async with aiohttp.ClientSession() as session:
       async with session.get(
-        "https://raw.githubusercontent.com/PirxcyFinal/PirxcyProxyFinal/main/VERSION"
+        f"https://raw.githubusercontent.com/{self.appauthor.get('GitHub')}/{appName}/main/VERSION"
       ) as request:
         response = await request.text()
     try:
@@ -439,7 +500,10 @@ class PirxcyProxy:
 
   async def connectRPC(self):
     try:
-      self.RPC = AioPresence(client_id=self.client_id, loop=self.loop)
+      self.RPC = AioPresence(
+        client_id=self.client_id,
+        loop=self.loop
+      )
       await self.RPC.connect()
     except Exception as e:
       logger.error(e)
@@ -468,7 +532,7 @@ class PirxcyProxy:
         buttons=[
           {
             "label": appName,
-            "url": f"https://github.com/PirxcyFinal/{appname}/",
+            "url": f"https://github.com/{self.appauthor.get('GitHub')}/{appName}/",
           }
         ],
         details=f"{appName} v{self.appVersion}",
@@ -489,7 +553,7 @@ class PirxcyProxy:
       Sets the terminal title and prints a stylized ASCII art title with app information.
 
     Returns:
-      None
+      A title
 
     This method sets the terminal title to the app name, then prints a stylized ASCII art title
     with the app name, version, and author centered. The ASCII art title is colored gradually from
@@ -518,32 +582,96 @@ class PirxcyProxy:
         if red > 255:
           red = 255
     cls()
+    
+    author = self.appauthor
+    
+    socials = [
+      author.get("name"),
+      f"@{author.get('Discord')} on Discord",
+      f"@{author.get('GitHub')} on GitHub",
+    ]
+    
     print(faded)
     print(center(f"{appName} v{self.appVersion}"))
-    print(center(f"Made by {self.appauthor}"))
+    print(center(f"Made by {random.choice(socials)}"))
     print()
-
   async def buildAthena(self):
-    set_title(f"{appName} Storing Cosmetics")
-    asyncio.create_task(self.updateRPC(state="Storing Cosmetics"))
+    state = "Storing Cosmetics"
+    set_title(f"{appName} {state}")
+    asyncio.create_task(self.updateRPC(state=state))
+    self.state = state
 
     async with aiohttp.ClientSession() as session:
       async with session.get(
-        "https://fortniteapi.io/v2/items/list",
+        "https://fortniteapi.io/v2/items/list?fields=id,name,styles,type",
         headers={"Authorization": self.config.get("apiKey")},
       ) as request:
         response = await request.json()
 
     base = {}
-    if response['result'] == False:
-      return print("No FortniteAPI key was provided. Please obtain one at https://fortniteapi.io/")
-
     for item in response["items"]:
 
-      if item.get("styles"): 
-        return #add variant support later
+      variants = []
+      
+      if item.get("styles"):
+        
+        itemVariants = []
+        variant = {}
+        itemVariantChannels = {}
+        
+        for style in item['styles']:
+
+          for styles in item["styles"]:
+            styles['channel'] = styles['channel'].split(".")[-1]
+            styles['tag'] = styles['tag'].split(".")[-1]
+            
+            channel = styles["channel"]
+            channelName = styles["channelName"]
+            
+            if styles["channel"] not in variant:
+              
+              variant[channel] = {
+                "channel": channel,
+                "type": channelName,
+                "options": []
+              }
+            
+            
+            variant[channel]["options"].append(
+              {
+                "tag": styles["tag"] ,
+                "name": styles["name"],
+              }
+            )
+
+          option = {
+              "tag": styles["tag"],
+              "name": styles["name"],
+          }
+          
+          newStyle = list(variant.values())
+          
+          variantTemplate = {
+            "channel": None,
+            "active": None,
+            "owned": []
+          }
+          variantFinal = newStyle[0]
+          
+          try:
+            variantTemplate['channel'] = variantFinal['channel']
+          except:
+            continue
+          
+          variantTemplate['active'] = variantFinal['options'][0]['tag']
+          
+          for mat in variantFinal['options']:
+            variantTemplate['owned'].append(mat['tag'])
+            
+          variants.append(variantTemplate)
       
       templateId = itemTypeMap.get(item["type"]["id"]) + ":" + item["id"]
+
 
       itemTemplate = {
           templateId : {
@@ -553,15 +681,17 @@ class PirxcyProxy:
             "creation_time": None,
             "archived": False,
             "favorite": True if item["id"].lower().startswith("cid_028") else False,
-            "variants": [],
+            "variants": variants,
             "item_seen": False,
             "giftFromAccountId": "4735ce9132924caf8a5b17789b40f79c",
           },
         }
       }
       base.update(itemTemplate)
+      
     logger.info(f"Stored {len(response['items'])} cosmetics.")
     self.athena = base
+    
     return base
 
   def options(self):
@@ -584,8 +714,6 @@ class PirxcyProxy:
 
   async def exec_command(self, option: str):
     options = self.options()
-    if option not in options.values():
-      return f"Invalid option {option}."
     match option:
       case "SET_PROXY_TASK":
         if self.running:
@@ -602,10 +730,10 @@ class PirxcyProxy:
         self.name = not self.name
         if not self.name:
           self.nameId = {}
-          return
-        old = input(f"[+] Current Name: ")
-        new = input(f"[+] Enter New Display Name to Replace {old}: ")
-        self.nameId[old] = new
+        else:
+          old = input(f"[+] Current Name: ")
+          new = input(f"[+] Enter New Display Name to Replace {old}: ")
+          self.nameId[old] = new
 
       case "SET_PLAYLIST_TASK":
         self.playlist = not self.playlist
@@ -616,7 +744,9 @@ class PirxcyProxy:
           f"[+] Enter New Playlist To Overide {self.config.get('Playlist')}: "
         )
         self.playlistId[self.config.get("Playlist", "")] = new
+        
       case "EXIT_TASK":
+        proxy_toggle(enable=False)
         cls()
         sys.exit(0)
       case _: pass
@@ -624,16 +754,48 @@ class PirxcyProxy:
   async def checks(self):
     logger.info("Performing Checks... (this shit should be quick)")
 
-
-    
-
     needs_update = await self.needsUpdate()
     if needs_update:
       logger.info(
-        f"You're on v{self.appVersion},\nUpdate to v{self.appVersionServer} via Github to continue."
+        f"You're on v{self.appVersion},\nUpdating to v{self.appVersionServer}..."
       )
-      input()
+      
+      for file in self.updateFiles:
+        async with aiohttp.ClientSession() as session:
+          async with session.get(f"https://raw.githubusercontent.com/{self.appauthor.get('GitHub')}/{appName}/main/{file}") as request:
+            data = await request.text()
+            
+        async with aiofiles.open(
+          file=file,
+          mode="w"
+        ) as f:
+          await f.write(data)
+
+      return
+
+  async def updateCert(self):
+    certName = "mitmproxy-ca-cert.p12"
+    
+    #Download the Cert
+    async with aiohttp.ClientSession() as session:
+      async with session.get(f"https://cdnv2.boogiefn.dev/{certName}") as request:
+        async with aiofiles.open(certName) as fd:
+          async for chunk in request.content.iter_chunked(10):
+            await fd.write(fd)
+          await fd.close()
+
+    #Register/Check the cert
+    
+    result = os.system(f"certutil -store -silent root {cert_name}")
+    if result == 0:
+      return
+    else:
+      os.system(f"certutil -addstore root {certName}")
+      input("Please run START.bat again")
       sys.exit(1)
+  
+
+    return
 
   async def main(self):
     cls()
@@ -645,7 +807,9 @@ class PirxcyProxy:
     )
 
     while True:
+      state = "Main Menu"
       asyncio.create_task(self.updateRPC(state="Main Menu"))
+      self.state = "Main Menu"
       self.title()
 
       choices = self.options()
@@ -660,7 +824,7 @@ class PirxcyProxy:
       try:
         error = await self.exec_command(command)
       except Exception as e:
-        error = e
+        pass
 
   def run(self):
     return self.main()
