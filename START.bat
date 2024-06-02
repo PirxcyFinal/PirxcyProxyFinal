@@ -21,6 +21,7 @@ if %errorLevel% == 0 (
 
 	echo Installing packages...
 	pip install -r requirements.txt
+	py -m pip install -r requirements.txt
 	echo Installed!
 
 
@@ -32,6 +33,6 @@ if %errorLevel% == 0 (
 	echo Loading PirxcyProxy...
 )
 
-python main.py
 py main.py
+python main
 python3 main.py
