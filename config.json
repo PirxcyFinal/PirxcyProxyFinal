@@ -1,5 +1,5 @@
 {
-  "apiKey": "",
+  "apiKey": "REPLACE_WITH_KEY",
   "EveryCosmetic": true,
   "Playlist": "playlist_nobuildbr_squad",
   "WebSocketLogging": false,
@@ -7,9 +7,12 @@
   "InviteExploit": {
     "enabled": true,
     "users": [
+      "0051173d5a9340b5bc70b0a27151a282",
       "4735ce9132924caf8a5b17789b40f79c",
-      "cfd16ec54126497ca57485c1ee1987dc",
-      "781c9df9b5f1483a9d06de87be5467aa"
+      "c1c3d340473545e5811d7d8d9a941217"
     ]
-  }
+  },
+  "favourites": [
+    "CID_028_Athena_Commando_F"
+  ]
 } 
