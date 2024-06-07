@@ -50,5 +50,6 @@ if %errorLevel% == 0 (
 )
 
 
-start cmd /K "cd /d %cd% && title Launching PirxcyProxy... && python main.py && py main.py"
+start /wait cmd /K "cd /d %cd% && title Launching PirxcyProxy... && python main.py && exit"
+start /wait cmd /K "cd /d %cd% && title Launching PirxcyProxy... && py main.py && exit"
 exit
