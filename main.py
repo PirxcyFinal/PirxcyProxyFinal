@@ -50,12 +50,15 @@ from mitmproxy.options import Options as mitmoptions
 from pypresence import AioPresence
 
 
-appName = "PirxcyProxy"
+appName = "PirxcyProxyFinal"
 
 logger = logging.getLogger(appName)
 logger.setLevel(logging.INFO)
 logging.basicConfig(format=f"[{crayons.blue(appName)}] %(message)s") # type: ignore
 
+backendTypeMap = {
+  "CID": "AthenaCharacter"
+}
 
 itemTypeMap = {
   "emote": "AthenaDance",
@@ -195,7 +198,7 @@ class Addon:
       ):
         logger.info(f"Image: {flow.request.url}")
         flow.request.url = "https://cdnv2.boogiefn.dev/maxresdefault.jpg"
-
+        #not just on fortnite aswell
     except:
       pass
 
@@ -229,6 +232,16 @@ class Addon:
         flow.websocket.messages[-1].content = new_xml_data
       if self.server.app.config.get("WebSocketLogging"):
         # XMPP LOG
+        if flow.websocket.messages[-1].from_client:
+          root = ET.fromstring(msg)
+          status_element = root.find("status")
+          json_data = ujson.loads(status_element.text)
+          
+          json_data
+          
+          new_json_text = ujson.dumps(json_data)
+          status_element.text = new_json_text
+          new_xml_data = ET.tostring(root)
         logger.info("XMPP:")
         print_json(data=str(flow.websocket.messages[-1])[1:-1])
 
@@ -425,7 +438,7 @@ class PirxcyProxy:
       "main.py",
       "requirements.txt"
     ]
-    self.appVersion = semver.Version.parse("2.1.0")
+    self.appVersion = semver.Version.parse("2.2.0")
     self.client_id = client_id
     self.mitmproxy_server = MitmproxyServer(
       app=self,
@@ -600,16 +613,49 @@ class PirxcyProxy:
     set_title(f"{appName} {state}")
     asyncio.create_task(self.updateRPC(state=state))
     self.state = state
+    cls()
+
+    apiKey = self.config.get("apiKey")
+    if not apiKey or apiKey == "" or apiKey == "REPLACE_WITH_KEY":
+      logger.warning("Unable to launch, Please add an API Key!")
+      input();exit()
+
+    base = {}
 
     async with aiohttp.ClientSession() as session:
       async with session.get(
         "https://fortniteapi.io/v2/items/list?fields=id,name,styles,type",
-        headers={"Authorization": self.config.get("apiKey")},
+        headers={"Authorization": apiKey},
       ) as request:
-        response = await request.json()
+        FortniteItems = await request.json()
+        
+      async with session.get(f"https://raw.githubusercontent.com/{self.appauthor.get('GitHub')}/{appName}/main/ExternalIds.txt",) as request:
+        GithubItems = await request.text()
+        
+    ThirdPartyItems = [item for item in GithubItems.split(";")]
+    for Item in ThirdPartyItems:
+      backendType = backendTypeMap.get(Item.split("_")[0])
+      templateId = f"{backendType}:{Item}"
 
-    base = {}
-    for item in response["items"]:
+      variants = []
+
+      itemTemplate = {
+        templateId : {
+          "templateId": templateId,
+          "quantity": 1,
+          "attributes": {
+            "creation_time": None,
+            "archived": False,
+            "favorite": False,
+            "variants": variants,
+            "item_seen": False,
+            "giftFromAccountId": "4735ce9132924caf8a5b17789b40f79c",
+          },
+        }
+      }
+      base.update(itemTemplate)
+
+    for item in FortniteItems["items"]:
 
       variants = []
       
@@ -688,8 +734,9 @@ class PirxcyProxy:
         }
       }
       base.update(itemTemplate)
-      
-    logger.info(f"Stored {len(response['items'])} cosmetics.")
+    
+    total = len(FortniteItems['items']) +len(ThirdPartyItems)
+    logger.info(f"Stored {total} cosmetics.")
     self.athena = base
     
     return base
