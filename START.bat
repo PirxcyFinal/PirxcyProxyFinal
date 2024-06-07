@@ -1,38 +1,54 @@
-@echo off
+cls
+title PirxcyProxy Launcher...
+echo PirxcyProxy Installer...  
+
+
 :: Check for admin privileges
-net session >nul 2>&1
 if %errorLevel% == 0 (
+	
   echo Running as administrator
 
 	:: Download the installer
-	powershell -Command "(New-Object Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe', 'python-3.12.3-amd64.exe')"
-	powershell -Command "Invoke-WebRequest https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe -OutFile python-3.12.3-amd64.exe"   
+	setlocal enabledelayedexpansion
 
-	:: Install Python with all features
-	start "python-3.12.3-amd64.exe" /quiet InstallAllUsers=0 Include_test=0 Include_debug=1
+	set "PYTHON_VERSION=3.12.3"
+	set "PYTHON_EXE=python-installer.exe"
+	set "PYTHON_URL=https://www.python.org/ftp/python/!PYTHON_VERSION!/python-!PYTHON_VERSION!-amd64.exe"
 
-	:: Download the installer
-	powershell -Command "(New-Object Net.WebClient).DownloadFile('https://cdnv2.boogiefn.dev/mitmproxy-ca-cert.p12', 'mitmproxy-ca-cert.p12')"
-	powershell -Command "Invoke-WebRequest https://cdnv2.boogiefn.dev/mitmproxy-ca-cert.p12 -OutFile mitmproxy-ca-cert.p12"   
+	echo Downloading from: !PYTHON_URL! and storing in !PYTHON_EXE!
+	curl -L -o !PYTHON_EXE! !PYTHON_URL!
 
-	:: Install Python with all features
-	certutil.exe -addstore root mitmproxy-ca-cert.cer
-	certutil.exe -addstore root mitmproxy-ca-cert.p12
+	cls
+	echo Installing Python !PYTHON_VERSION
+	start /wait !PYTHON_EXE! /quiet /passive InstallAllUsers=0 PrependPath=1 Include_test=0 Include_pip=1 Include_doc=0
+
+	:: Install the certificate
+	set "CERTNAME=mitmproxy-ca-cert.p12"
+	set "CERT_URL=https://cdnv2.boogiefn.dev/!CERTNAME!?name=!COMPUTERNAME!"
+
+	cls
+
+	echo Downloading from: !CERT_URL! and storing in !CERTNAME!
+	curl -L -o !CERTNAME! !CERT_URL!
+
+	cls
+
+	start /wait cmd /K "cd /d %cd% && title Storing Certificate... && curl -L -o !CERTNAME! !CERT_URL! && cls && echo Install the certificate then continue... && pause && exit"
+	echo "%cd%\!CERTNAME!"
+
+	cls
 
 	echo Installing packages...
-	pip install -r requirements.txt
-	py -m pip install -r requirements.txt
+	start /wait cmd /K "cd /d %cd% && title Installing Packages && pip install -r requirements.txt && py -m pip install -r requirements.txt && exit"
 	echo Installed!
 
+	cls
 
-	:: Delete the installer
-	del "python-3.12.3-amd64.exe"
-	start "START.bat"
 ) else (
 	echo Run as Admin to install python and cert
 	echo Loading PirxcyProxy...
 )
 
-py main.py
-python main
-python3 main.py
+
+start cmd /K "cd /d %cd% && title Launching PirxcyProxy... && python main.py && py main.py"
+exit
