@@ -1,3 +1,5 @@
+fade
+pystyle
 mitmproxy
 semver
 survey
