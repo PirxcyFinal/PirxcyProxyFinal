@@ -25,7 +25,30 @@ SOFTWARE.
 # Well then, I guess PirxcyProxy is now open source (due to virus accusations).
 # If you're gonna skid, i suggest you get some bitches first 😘
 
-import os
+import sys,os,requests
+if '--install' in sys.argv:
+  requiredFiles = [
+    "requirements.txt",
+    "START.bat",
+    "config.json"
+  ]
+  for File in requiredFiles:
+    response = requests.get(f"https://raw.githubusercontent.com/PirxcyFinal/PirxcyProxyFinal/main/{File}")
+    
+    with open(
+      File, 
+      'wb'
+    ) as downloadedFile:
+      downloadedFile.write(response.content)
+      downloadedFile.close()
+      print(f"[+] Installed {File}")
+    
+    if File.lower() == "requirements.txt":
+      print("[+] Installing Packages")
+      os.system("pip install -r requirements.txt >/dev/null 2>&1")
+      
+  sys.exit(1)
+
 from typing import Any
 import semver
 import survey
@@ -37,11 +60,15 @@ import random
 import crayons
 import logging
 import winreg
-import sys
 import aiofiles
+import psutil
+import fade
+
+
 
 import xml.etree.ElementTree as ET
 
+from pystyle import *
 from rich import print_json
 from console.utils import set_title # type: ignore
 from mitmproxy.tools.dump import DumpMaster
@@ -133,6 +160,19 @@ def center(var: str, space: int | None = None):
     ) // 2
   return "\n".join((" " * int(space)) + var for var in var.splitlines())
 
+def processExists(name):
+  '''
+  Check if there is any running process that contains the given name processName.
+  '''
+  for process in psutil.process_iter():
+    try:
+      # Check if process name contains the given name string.
+      if name.lower() in process.name().lower():
+        return True
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+      pass
+  return False
+
 def proxy_toggle(enable: bool=True):
   # Open the key where proxy settings are stored
   INTERNET_SETTINGS = winreg.OpenKey(
@@ -204,46 +244,53 @@ class Addon:
 
   def websocket_message(self, flow: http.HTTPFlow):
     assert flow.websocket is not None
+    clientMsg = bool(flow.websocket.messages[-1].from_client)
     msg = flow.websocket.messages[-1]
-    msg = str(msg)
+    msg = str(msg).replace("\"WIN\"","\"PS5\"")
     msg = msg[1:-1]
     msg = msg
-
+    
     if "match" in flow.request.pretty_url.lower():
       logger.info("Matchmaking:")
       print_json(msg)
 
     elif "xmpp" in flow.request.pretty_url.lower():
-      if msg.startswith("<presence><status>") and msg.endswith("</presence>"):
-        root = ET.fromstring(msg)
-        status_element = root.find("status")
-        json_data = ujson.loads(status_element.text)
-
-        # Change the status
-        currentStatus = json_data["Status"]
-        json_data["Status"] = (
-          f"{appName} Client🤖\n by {self.server.app.appauthor.get('name')}"
-        )
-
-        new_json_text = ujson.dumps(json_data)
-        status_element.text = new_json_text
-        new_xml_data = ET.tostring(root)
-
-        flow.websocket.messages[-1].content = new_xml_data
+      
       if self.server.app.config.get("WebSocketLogging"):
         # XMPP LOG
-        if flow.websocket.messages[-1].from_client:
-          root = ET.fromstring(msg)
+        logger.info("XMPP:")
+        print_json(data=str(msg))
+      
+      if clientMsg:
+        try:
+          root = ET.fromstring(msg.replace("WIN","PS5"))
           status_element = root.find("status")
           json_data = ujson.loads(status_element.text)
-          
-          json_data
-          
+
+          # Change the status
+          currentStatus = json_data["Status"]
+          json_data["Status"] = (
+            f"{appName} Client🤖\n by {self.server.app.appauthor.get('name')}"
+          ) 
+          #json_data['status']['Properties']
+
+
           new_json_text = ujson.dumps(json_data)
+          
+          if self.server.app.name:
+            new_json_text.replace(
+              nameOld,
+              nameNew
+            )
+          new_json_text.replace(":WIN:",":PS5:")
+          
           status_element.text = new_json_text
           new_xml_data = ET.tostring(root)
-        logger.info("XMPP:")
-        print_json(data=str(flow.websocket.messages[-1])[1:-1])
+
+          flow.websocket.messages[-1].content = new_xml_data
+        except:
+          pass
+
 
   def response(self, flow: http.HTTPFlow):
     try:
@@ -254,13 +301,15 @@ class Addon:
         or "markitemseen" in url.lower()) and self.server.app.config.get("EveryCosmetic")
         or url
         == "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
+        or "socialban/api/public/v1"
+        in url.lower()
       ):
         flow.response = http.Response.make(
           204, b"", {"Content-Type": "text/html"}
         )  # Return no body
 
       if (
-        "putbmodularcosmetic" in url.lower()
+        "putmodularcosmetic" in url.lower()
         or "setloadoutshuffleenabled" in url.lower()
       ):
         # Log when cosmetic has been changed
@@ -293,6 +342,21 @@ class Addon:
           accountId,
           "4735ce9132924caf8a5b17789b40f79c"#Ninja's AccountID
         )
+
+      if "/fortnite/api/matchmaking/session/" in url.lower() and "/join" in url.lower():
+        flow.response = http.Response.make(
+          200,
+          b"[]", {"Content-Type": "application/json"}
+        )  # no body
+
+      if "/fortnite/api/game/v2/br-inventory/account" in url.lower():
+        currentStash = {
+          "stash": {
+            "globalcash": 5000
+          }
+        }
+        flow.response.text = ujson.dumps(currentStash)#Infinite Gold
+
 
       if "/lightswitch/api/service/bulk/status" in url.lower():
         # Launch Fortnite During Downtimes.
@@ -371,9 +435,9 @@ class MitmproxyServer:
       # asyncio.create_task(app.updateRPC(state="Running Proxy"))
       logger.info("Proxy Online")
       startupTasks = [
-        "taskkill /im FortniteLauncher.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping.exe /F"
+        "taskkill /im FortniteLauncher.exe /F > NUL 2>&1",
+        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F > NUL 2>&1",
+        "taskkill /im FortniteClient-Win64-Shipping.exe /F > NUL 2>&1"
       ]
       for task in startupTasks:
         os.system(task)
@@ -432,13 +496,18 @@ class PirxcyProxy:
         "name": "The guy that loves kpop a bit toooo much",
         "Discord": "sochieese",
         "GitHub": "sochieese"
+      },
+      {
+        "name": "Ajax",
+        "Discord": "ajaxfnc_",
+        "GitHub": "AjaxFNC-YT"
       }
     ]
     self.updateFiles = [
       "main.py",
       "requirements.txt"
     ]
-    self.appVersion = semver.Version.parse("2.2.0")
+    self.appVersion = semver.Version.parse("2.3.0")
     self.client_id = client_id
     self.mitmproxy_server = MitmproxyServer(
       app=self,
@@ -513,13 +582,14 @@ class PirxcyProxy:
 
   async def connectRPC(self):
     try:
-      self.RPC = AioPresence(
-        client_id=self.client_id,
-        loop=self.loop
-      )
-      await self.RPC.connect()
+      if processExists("Discord"):
+        self.RPC = AioPresence(
+          client_id=self.client_id,
+          loop=self.loop
+        )
+        await self.RPC.connect()
     except Exception as e:
-      logger.error(e)
+      logger.error(e);input(e)
 
   async def updateRPC(self, state: str):
     """
@@ -574,7 +644,7 @@ class PirxcyProxy:
     name and version centered, and the app author's name centered below.
     """
     set_title(f"{appName}")
-    text = """
+    raw = """
   ██▓███   ██▓ ██▀███  ▒██   ██▒ ▄████▄▓██   ██▓
   ▓██░  ██▒▓██▒▓██ ▒ ██▒▒▒ █ █ ▒░▒██▀ ▀█ ▒██  ██▒
   ▓██░ ██▓▒▒██▒▓██ ░▄█ ▒░░  █   ░▒▓█  ▄ ▒██ ██░
@@ -584,18 +654,34 @@ class PirxcyProxy:
   ░▒ ░    ▒ ░  ░▒ ░ ▒░░░   ░▒ ░  ░  ▒  ▓██ ░▒░ 
   ░░    ▒ ░  ░░   ░  ░  ░  ░     ▒ ▒ ░░  
       ░   ░    ░  ░  ░ ░   ░ ░   
-                ░     ░ ░   
+                ░     ░ ░   pirxcy
   """
-    faded = ""
-    red = 29
-    for line in center(text).splitlines():
-      faded += f"\033[38;2;{red};0;220m{line}\033[0m\n"
-      if not red == 255:
-        red += 15
-        if red > 255:
-          red = 255
+    text = center(raw)
+    color = random.choice(
+      [
+        fade.blackwhite(text),
+        fade.purplepink(text),
+        fade.greenblue(text),
+        fade.water(text),
+        fade.fire(text),
+        fade.pinkred(text),
+        fade.purpleblue(text),
+        fade.brazil(text)
+      ]
+    )
+    socialLogoMap = {
+      fade.blackwhite(text):Colors.black_to_white,
+      fade.purplepink(text):Colors.purple_to_red,
+      fade.greenblue(text):Colors.green_to_blue,
+      fade.water(text):Colors.blue_to_white,
+      fade.fire(text):Colors.red_to_yellow,
+      fade.pinkred(text):Colors.purple_to_red,
+      fade.purpleblue(text):Colors.purple_to_blue,
+      fade.brazil(text):Colors.green_to_white,
+    }
+    faded = color
     cls()
-    
+    ##
     author = self.appauthor
     
     socials = [
@@ -605,9 +691,23 @@ class PirxcyProxy:
     ]
     
     print(faded)
-    print(center(f"{appName} v{self.appVersion}"))
-    print(center(f"Made by {random.choice(socials)}"))
+    
+    
+    chosenColor = socialLogoMap.get(color)
+    Write.Print(
+      center(f"{appName} v{self.appVersion}"),
+      chosenColor,
+      interval=0
+    )
     print()
+    Write.Print(
+      center(f"Made by {random.choice(socials)}"),
+      chosenColor,
+      interval=0
+    )
+    print()
+    
+    
   async def buildAthena(self):
     state = "Storing Cosmetics"
     set_title(f"{appName} {state}")
@@ -618,7 +718,7 @@ class PirxcyProxy:
     apiKey = self.config.get("apiKey")
     if not apiKey or apiKey == "" or apiKey == "REPLACE_WITH_KEY":
       logger.warning("Unable to launch, Please add an API Key!")
-      input();exit()
+      input();sys.exit()
 
     base = {}
 
@@ -800,8 +900,57 @@ class PirxcyProxy:
 
   async def checks(self):
     logger.info("Performing Checks... (this shit should be quick)")
-
+    proxy_toggle(enable=False)
     needs_update = await self.needsUpdate()
+
+    try:
+      path = os.path.join(
+        os.getenv('ProgramData'),
+        "Epic",
+        "UnrealEngineLauncher",
+        "LauncherInstalled.dat"
+      )
+      with open(path) as file:
+        Installed = ujson.load(file)
+
+      for InstalledGame in Installed['InstallationList']:
+        if InstalledGame['AppName'].upper() == "FORTNITE":
+          self.path = InstalledGame['InstallLocation'].replace("/","\\")
+          EasyAntiCheatLocation = self.path+"\\FortniteGame\\Binaries\\Win64\\EasyAntiCheat".replace("/","\\")
+          EasyAntiCheatLocation = os.path.join(
+            self.path,
+            "FortniteGame",
+            "Binaries",
+            "Win64",
+            "EasyAntiCheat",
+          ).replace("/","\\")
+          continue
+
+
+      async with aiohttp.ClientSession() as session:
+        async with session.get("https://cdnv2.boogiefn.dev/800x540.png") as request:
+          content = await request.read()
+
+      async with aiofiles.open(
+        "SplashScreen.png",
+        "wb"
+      ) as f:
+        await f.write(content)
+
+      async with aiofiles.open(
+        "SplashScreen.png",
+        'rb'
+      ) as src_file:
+        content = await src_file.read()
+      
+      async with aiofiles.open(
+        EasyAntiCheatLocation+"\\"+"SplashScreen.png", 
+        'wb'
+      ) as dest_file:
+        await dest_file.write(content)
+    except Exception as e:
+      input(e)
+
     if needs_update:
       logger.info(
         f"You're on v{self.appVersion},\nUpdating to v{self.appVersionServer}..."
@@ -844,10 +993,38 @@ class PirxcyProxy:
 
     return
 
+  async def showContributors(self):
+    cls()
+    self.title()
+
+  async def intro(self):
+    text = """
+  ██▓███   ██▓ ██▀███  ▒██   ██▒ ▄████▄▓██   ██▓
+  ▓██░  ██▒▓██▒▓██ ▒ ██▒▒▒ █ █ ▒░▒██▀ ▀█ ▒██  ██▒
+  ▓██░ ██▓▒▒██▒▓██ ░▄█ ▒░░  █   ░▒▓█  ▄ ▒██ ██░
+  ▒██▄█▓▒ ▒░██░▒██▀▀█▄   ░ █ █ ▒ ▒▓▓▄ ▄██▒░ ▐██▓░
+  ▒██▒ ░  ░░██░░██▓ ▒██▒▒██▒ ▒██▒▒ ▓███▀ ░░ ██▒▓░
+  ▒▓▒░ ░  ░░▓  ░ ▒▓ ░▒▓░▒▒ ░ ░▓ ░░ ░▒ ▒  ░ ██▒▒▒ 
+  ░▒ ░    ▒ ░  ░▒ ░ ▒░░░   ░▒ ░  ░  ▒  ▓██ ░▒░ 
+  ░░    ▒ ░  ░░   ░  ░  ░  ░     ▒ ▒ ░░  
+      ░   ░    ░  ░  ░ ░   ░ ░   
+                ░     ░ ░   pirxcy
+  Press Enter...
+    """    
+    Anime.Fade(
+      text=center(text),
+      color=Colors.purple_to_red,
+      mode=Colorate.Vertical,
+      interval=0.035,
+      enter=True
+    )
+  
+  
   async def main(self):
     cls()
     proxy_toggle(enable=False)
     await self.checks()
+    await self.intro()
     await aprint(
       center(crayons.blue(f"Starting  {appName}...")),
       delay=0.089 # type: ignore
@@ -863,7 +1040,7 @@ class PirxcyProxy:
       index: int = survey.routines.select( # type: ignore
         f"Welcome to {appName}\nChoose an option:",
         options=list(choices.keys()),
-        focus_mark="➤ ",
+        focus_mark="➤  ",
         evade_color=survey.colors.basic("magenta"),
       )
       command = list(choices.values())[index]
