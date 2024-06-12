@@ -10,4 +10,5 @@ console
 pypresence
 rich
 aiohttp
+psutil
 aiofiles
