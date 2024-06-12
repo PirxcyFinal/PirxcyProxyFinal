@@ -5,6 +5,7 @@ semver
 survey
 ujson
 crayons
+requests
 console
 pypresence
 rich
