@@ -28,7 +28,6 @@ SOFTWARE.
 import sys,os,requests
 if '--install' in sys.argv:
   requiredFiles = [
-    "requirements.txt",
     "START.bat",
     "config.json"
   ]
@@ -42,15 +41,10 @@ if '--install' in sys.argv:
       downloadedFile.write(response.content)
       downloadedFile.close()
       print(f"[+] Installed {File}")
-    
-    if File.lower() == "requirements.txt":
-      print("[+] Installing Packages")
-      os.system("pip install -r requirements.txt >/dev/null 2>&1")
       
   sys.exit(1)
 
-from typing import Any
-import semver
+import semver 
 import survey
 import aiohttp
 import asyncio
@@ -69,6 +63,7 @@ import fade
 import xml.etree.ElementTree as ET
 
 from pystyle import *
+from typing import Any
 from rich import print_json
 from console.utils import set_title # type: ignore
 from mitmproxy.tools.dump import DumpMaster
@@ -78,10 +73,12 @@ from pypresence import AioPresence
 
 
 appName = "PirxcyProxyFinal"
+debug = False
 
 logger = logging.getLogger(appName)
 logger.setLevel(logging.INFO)
-logging.basicConfig(format=f"[{crayons.blue(appName)}] %(message)s") # type: ignore
+
+logging.basicConfig(format=f"[{crayons.blue(appName)}] %(levelname)s %(message)s") # type: ignore
 
 backendTypeMap = {
   "CID": "AthenaCharacter"
@@ -97,7 +94,7 @@ itemTypeMap = {
   "pet": "AthenaPetCarrier",
   "spray": "AthenaDance",
   "music": "AthenaMusicPack",
-  "bannertoken": "BannerToken",
+  "bannertoken": "HomebaseBannerIcon",
   "contrail": "AthenaSkyDiveContrail",
   "wrap": "AthenaItemWrap",
   "loadingscreen": "AthenaLoadingScreen",
@@ -212,7 +209,7 @@ class Addon:
 
       if ".blurl" in url:
         logger.info(url)
-        flow.request.url = "https://cdnv2.boogiefn.dev/master.blurl"
+        flow.request.url = "https://cdn.boogiefn.dev/master.blurl"
         logger.info(f".blurl {flow.request.url}")
 
       if (
@@ -237,7 +234,7 @@ class Addon:
         ".epic" in url or ".unreal" in url or ".static" in url
       ):
         logger.info(f"Image: {flow.request.url}")
-        flow.request.url = "https://cdnv2.boogiefn.dev/maxresdefault.jpg"
+        flow.request.url = "https://cdn.boogiefn.dev/maxresdefault.jpg"
         #not just on fortnite aswell
     except:
       pass
@@ -299,15 +296,18 @@ class Addon:
       if (
         ("setloadoutshuffleenabled" in url.lower()
         or "markitemseen" in url.lower()) and self.server.app.config.get("EveryCosmetic")
-        or url
-        == "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
-        or "socialban/api/public/v1"
-        in url.lower()
+        or 
+        url
+        == 
+        "https://fortnitewaitingroom-public-service-prod.ol.epicgames.com/waitingroom/api/waitingroom"
+        or 
+        "socialban/api/public/v1"
+        in 
+        url.lower()
       ):
         flow.response = http.Response.make(
           204, b"", {"Content-Type": "text/html"}
-        )  # Return no body
-
+        )  # Return no body 
       if (
         "putmodularcosmetic" in url.lower()
         or "setloadoutshuffleenabled" in url.lower()
@@ -318,8 +318,24 @@ class Addon:
       if  "client/QueryProfile?profileId=athena" in url or "client/QueryProfile?profileId=common_core" in url or "client/ClientQuestLogin?profileId=athena" in url and self.server.app.config.get("EveryCosmetic"):
         text = flow.response.get_text()
         athenaFinal = ujson.loads(text)
-        athenaFinal["profileChanges"][0]["profile"]["items"].update(self.server.app.athena)  # Add items to current athena
-        flow.response.text = ujson.dumps(athenaFinal)
+        try:
+          athenaFinal["profileChanges"][0]["profile"]["items"].update(self.server.app.athena)  # Add items to current athena
+          if self.server.app.level:
+            athenaFinal["profileChanges"][0]["profile"]["stats"]["attributes"]["level"] = self.server.app.level
+          if self.server.app.battleStars:
+            athenaFinal["profileChanges"][0]["profile"]["stats"]["attributes"]["battlestars"] = self.server.app.battleStars
+          try:
+            if self.server.app.crowns:
+              athenaFinal["profileChanges"][0]["profile"]["items"]["VictoryCrown_defaultvictorycrown"]['attributes']['victory_crown_account_data']["total_royal_royales_achieved_count"] = self.server.app.crowns
+          except KeyError:
+            pass
+          flow.response.text = ujson.dumps(athenaFinal)
+        except KeyError:
+          if debug:
+            input(text)
+          else:
+            pass
+        
 
       if (
         "https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/game/v2/matchmakingservice/ticket/player"
@@ -346,7 +362,8 @@ class Addon:
       if "/fortnite/api/matchmaking/session/" in url.lower() and "/join" in url.lower():
         flow.response = http.Response.make(
           200,
-          b"[]", {"Content-Type": "application/json"}
+          b"[]",
+          {"Content-Type": "application/json"}
         )  # no body
 
       if "/fortnite/api/game/v2/br-inventory/account" in url.lower():
@@ -398,7 +415,11 @@ class Addon:
         logger.info(url)
 
     except Exception as e:
-      logger.error(e)
+      if debug:
+        print(traceback.format_exc())
+        input(e)
+      else:
+        logger.error(e)
 
 
 class MitmproxyServer:
@@ -435,12 +456,15 @@ class MitmproxyServer:
       # asyncio.create_task(app.updateRPC(state="Running Proxy"))
       logger.info("Proxy Online")
       startupTasks = [
-        "taskkill /im FortniteLauncher.exe /F > NUL 2>&1",
-        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F > NUL 2>&1",
-        "taskkill /im FortniteClient-Win64-Shipping.exe /F > NUL 2>&1"
+        "taskkill /im FortniteLauncher.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping_BE.exe /F",
+        "taskkill /im FortniteClient-Win64-Shipping.exe /F",
+        "taskkill /im EpicGamesLauncher.exe /F"
       ]
       for task in startupTasks:
-        os.system(task)
+        os.system(task+" > NUL 2>&1")
       self.task = asyncio.create_task(self.m.run())
     except KeyboardInterrupt:
       pass
@@ -520,6 +544,9 @@ class PirxcyProxy:
     self.nameId = {}
     self.athena = {}
     self.playlist = False
+    self.level = None
+    self.battleStars = None
+    self.crowns = None
     self.playlistId = {}
 
     self.config = {}
@@ -589,7 +616,11 @@ class PirxcyProxy:
         )
         await self.RPC.connect()
     except Exception as e:
-      logger.error(e);input(e)
+      if debug:
+        print(traceback.format_exc())
+        input(e)
+      else:
+        logger.error(e)
 
   async def updateRPC(self, state: str):
     """
@@ -619,7 +650,7 @@ class PirxcyProxy:
           }
         ],
         details=f"{appName} v{self.appVersion}",
-        large_image=("https://cdnv2.boogiefn.dev/newB.gif"),
+        large_image=("https://cdn.boogiefn.dev/newB.gif"),
         large_text=f"{appName}",
         small_image=(
           "https://upload.wikimedia.org/wikipedia/commons/7/7c/Fortnite_F_lettermark_logo.png"
@@ -835,6 +866,28 @@ class PirxcyProxy:
       }
       base.update(itemTemplate)
     
+    crownTemplate = {
+      "VictoryCrown_defaultvictorycrown":
+        {
+          "templateId": "VictoryCrown:defaultvictorycrown",
+          "attributes": {
+            "victory_crown_account_data": {
+              "has_victory_crown": True,
+              "data_is_valid_for_mcp": True,
+              "total_victory_crowns_bestowed_count": 500,
+              "total_royal_royales_achieved_count": 1942
+            },
+            "max_level_bonus": 0,
+            "level": 124,
+            "item_seen": False,
+            "xp": 0,
+            "favorite": False
+          },
+          "quantity": 1
+        }
+    }   
+    base.update(crownTemplate)  
+      
     total = len(FortniteItems['items']) +len(ThirdPartyItems)
     logger.info(f"Stored {total} cosmetics.")
     self.athena = base
@@ -842,22 +895,37 @@ class PirxcyProxy:
     return base
 
   def options(self):
-    return {
-      (
-        "Enable Proxy" if not self.ProxyEnabled else "Disable Proxy"
-      ): "SET_PROXY_TASK",
-      (
-        "Configure Custom Display Name"
-        if not self.name
-        else "Remove Display Name Configuration"
-      ): "SET_NAME_TASK",
-      (
-        "Configure Playlist Swap"
-        if not self.playlist
-        else "Remove Playlist Configuration"
-      ): "SET_PLAYLIST_TASK",
-      f"Exit {appName}": "EXIT_TASK",
-    }
+    options = {}
+    
+    if self.ProxyEnabled:#Proxy
+      options.update({"Disable Proxy":"SET_PROXY_TASK"})
+    else:
+      options.update({"Enable Proxy":"SET_PROXY_TASK"})
+      
+    if self.name:#Display Name
+      options.update({"Remove Custom Display Name":"SET_NAME_TASK"})
+    else:
+      options.update({"Change Display Name":"SET_NAME_TASK"})
+    
+    if self.playlist:
+      options.update({"Remove Custom Playlist":"SET_PLAYLIST_TASK"})
+    else:
+      options.update({"Set Playlist":"SET_PLAYLIST_TASK"})
+      
+    if self.playlist:
+      options.update({"Remove Custom Playlist":"SET_PLAYLIST_TASK"})
+    else:
+      options.update({"Set Playlist":"SET_PLAYLIST_TASK"})
+      
+      
+    
+    options.update({f"Change Level": "SET_LEVEL_TASK"})
+    options.update({f"Change Battle Stars": "SET_BATTLESTARS_TASK"})
+    options.update({f"Change Crowns": "SET_CROWN_TASK"})
+    
+    options.update({f"Exit {appName}": "EXIT_TASK"})
+
+    return options
 
   async def exec_command(self, option: str):
     options = self.options()
@@ -881,6 +949,18 @@ class PirxcyProxy:
           old = input(f"[+] Current Name: ")
           new = input(f"[+] Enter New Display Name to Replace {old}: ")
           self.nameId[old] = new
+        
+      case "SET_LEVEL_TASK":
+        level = input(f"[+] Set Level: ")
+        self.level = int(level)
+        
+      case "SET_BATTLESTARS_TASK":
+        battleStars = input(f"[+] Set Battle Stars: ")
+        self.battleStars = int(battleStars)
+        
+      case "SET_CROWN_TASK":
+        crowns = input(f"[+] Set Battle Stars: ")
+        self.crowns = int(crowns)
 
       case "SET_PLAYLIST_TASK":
         self.playlist = not self.playlist
@@ -928,7 +1008,7 @@ class PirxcyProxy:
 
 
       async with aiohttp.ClientSession() as session:
-        async with session.get("https://cdnv2.boogiefn.dev/800x540.png") as request:
+        async with session.get("https://cdn.boogiefn.dev/800x540.png") as request:
           content = await request.read()
 
       async with aiofiles.open(
@@ -949,7 +1029,11 @@ class PirxcyProxy:
       ) as dest_file:
         await dest_file.write(content)
     except Exception as e:
-      input(e)
+      if debug:
+        print(traceback.format_exc())
+        input(e)
+      else:
+        logger.error(e)
 
     if needs_update:
       logger.info(
@@ -968,27 +1052,6 @@ class PirxcyProxy:
           await f.write(data)
 
       return
-
-  async def updateCert(self):
-    certName = "mitmproxy-ca-cert.p12"
-    
-    #Download the Cert
-    async with aiohttp.ClientSession() as session:
-      async with session.get(f"https://cdnv2.boogiefn.dev/{certName}") as request:
-        async with aiofiles.open(certName) as fd:
-          async for chunk in request.content.iter_chunked(10):
-            await fd.write(fd)
-          await fd.close()
-
-    #Register/Check the cert
-    
-    result = os.system(f"certutil -store -silent root {cert_name}")
-    if result == 0:
-      return
-    else:
-      os.system(f"certutil -addstore root {certName}")
-      input("Please run START.bat again")
-      sys.exit(1)
   
 
     return
@@ -1015,7 +1078,7 @@ class PirxcyProxy:
       text=center(text),
       color=Colors.purple_to_red,
       mode=Colorate.Vertical,
-      interval=0.035,
+      interval=0.000100101001,
       enter=True
     )
   
