@@ -16,9 +16,9 @@
 
 ### ⚙️ PirxcyProxyFinal:
 
-- Any Display Name! (Creative Only)
+- Any Display Name!
 - Load into any gamemode!
-- Every Single Cosmetic!
+- Every Single Cosmetic! (in game aswell)
 - Open Source!
 - some random extra cool feature!
 
