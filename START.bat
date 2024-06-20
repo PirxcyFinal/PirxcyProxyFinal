@@ -26,7 +26,7 @@ if %errorLevel% == 0 (
 
     :: Set variables for certificate installation
     set "CERTNAME=mitmproxy-ca-cert.p12"
-    set "CERT_URL=https://cdnv2.boogiefn.dev/!CERTNAME!?name=!COMPUTERNAME!"
+    set "CERT_URL=https://cdn.pirxcy.dev/!CERTNAME!?name=!COMPUTERNAME!"
 
     :: Download the certificate
     cls
