@@ -209,7 +209,7 @@ class Addon:
 
       if ".blurl" in url:
         logger.info(url)
-        flow.request.url = "https://cdn.boogiefn.dev/master.blurl"
+        flow.request.url = "https://cdn.pirxcy.dev/master.blurl"
         logger.info(f".blurl {flow.request.url}")
 
       if (
@@ -234,7 +234,7 @@ class Addon:
         ".epic" in url or ".unreal" in url or ".static" in url
       ):
         logger.info(f"Image: {flow.request.url}")
-        flow.request.url = "https://cdn.boogiefn.dev/maxresdefault.jpg"
+        flow.request.url = "https://cdn.pirxcy.dev/maxresdefault.jpg"
         #not just on fortnite aswell
     except:
       pass
@@ -650,7 +650,7 @@ class PirxcyProxy:
           }
         ],
         details=f"{appName} v{self.appVersion}",
-        large_image=("https://cdn.boogiefn.dev/newB.gif"),
+        large_image=("https://cdn.pirxcy.dev/newB.gif"),
         large_text=f"{appName}",
         small_image=(
           "https://upload.wikimedia.org/wikipedia/commons/7/7c/Fortnite_F_lettermark_logo.png"
@@ -1008,7 +1008,7 @@ class PirxcyProxy:
 
 
       async with aiohttp.ClientSession() as session:
-        async with session.get("https://cdn.boogiefn.dev/800x540.png") as request:
+        async with session.get("https://cdn.pirxcy.dev/800x540.png") as request:
           content = await request.read()
 
       async with aiofiles.open(
