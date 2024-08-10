@@ -1,18 +1,30 @@
 {
-  "apiKey": "REPLACE_WITH_KEY",
-  "EveryCosmetic": true,
-  "Playlist": "playlist_nobuildbr_squad",
-  "WebSocketLogging": false,
-  "updateSkip": false,
-  "InviteExploit": {
-    "enabled": true,
-    "users": [
-      "0051173d5a9340b5bc70b0a27151a282",
-      "4735ce9132924caf8a5b17789b40f79c",
-      "c1c3d340473545e5811d7d8d9a941217"
-    ]
-  },
-  "favourites": [
-    "CID_028_Athena_Commando_F"
-  ]
-} 
+    "apiKey": "YOUR_API_KEY",
+    "EveryCosmetic": true,
+    "closeFortnite": false,
+    "Playlist": "playlist_nobuildbr_squad",
+    "WebSocketLogging": false,
+    "updateSkip": false,
+    "InviteExploit": {
+      "enabled": true,
+      "users": [
+        "4665a6d249054b128ee177dae640312c",
+        "4735ce9132924caf8a5b17789b40f79c",
+        "c1c3d340473545e5811d7d8d9a941217"
+      ]
+    },
+    "saved": {
+      "presets": {
+        "character": {},
+        "emotes": {},
+        "lobby": {},
+        "wraps": {},
+        "sports": {},
+        "suv": {},
+        "instruments": {},
+        "jam": {}
+      },
+      "favorite": [],
+      "archived": []
+    }
+  }

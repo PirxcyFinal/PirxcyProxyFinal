@@ -49,7 +49,7 @@ import survey
 import aiohttp
 import asyncio
 import traceback
-import ujson
+import ujson,json
 import random
 import crayons
 import logging
@@ -64,11 +64,12 @@ import xml.etree.ElementTree as ET
 
 from pystyle import *
 from typing import Any
+from datetime import datetime
 from rich import print_json
 from console.utils import set_title # type: ignore
-from mitmproxy.tools.dump import DumpMaster
+from mitmproxy.tools.web.master import WebMaster
 from mitmproxy import http
-from mitmproxy.options import Options as mitmoptions
+from mitmproxy.options import Options
 from pypresence import AioPresence
 
 
@@ -128,6 +129,8 @@ def readConfig():
   with open("config.json") as f:
     config = ujson.loads(f.read())
     return config
+  
+  #is dumping the same as normal json?
 
 async def aprint(text: str, delay: float):
   """
@@ -192,11 +195,16 @@ def proxy_toggle(enable: bool=True):
   proxy_enable = winreg.QueryValueEx(INTERNET_SETTINGS, "ProxyEnable")[0]
 
   if proxy_enable == 0 and enable:
-    set_key("ProxyServer", "127.0.0.1:8080")
+    set_key("ProxyServer", "127.0.0.1:1942")
     set_key("ProxyEnable", 1)
   elif proxy_enable == 1 and not enable:
     set_key("ProxyEnable", 0)
     set_key("ProxyServer", "")
+
+def gracefulExit():
+  proxy_toggle(enable=False)
+  while True:
+    sys.exit()
 
 class Addon:
   def __init__(self, server: "MitmproxyServer"):
@@ -206,6 +214,9 @@ class Addon:
     """Handle Requests"""
     try:
       url = flow.request.pretty_url
+
+      if url.lower().startswith("https://eulatracking-public-service-prod06.ol.epicgames.com/eulatracking/api/public/agreements/fn/account/"):
+        logger.info("Fortnite Start Detected")
 
       if ".blurl" in url:
         logger.info(url)
@@ -236,8 +247,8 @@ class Addon:
         logger.info(f"Image: {flow.request.url}")
         flow.request.url = "https://cdn.pirxcy.dev/maxresdefault.jpg"
         #not just on fortnite aswell
-    except:
-      pass
+    except Exception as e:
+      logger.error(e)
 
   def websocket_message(self, flow: http.HTTPFlow):
     assert flow.websocket is not None
@@ -267,7 +278,7 @@ class Addon:
           # Change the status
           currentStatus = json_data["Status"]
           json_data["Status"] = (
-            f"{appName} Client🤖\n by {self.server.app.appauthor.get('name')}"
+            f"👉 discord.gg/pirxcy 🔌"
           ) 
           #json_data['status']['Properties']
 
@@ -294,8 +305,7 @@ class Addon:
       url = flow.request.pretty_url
 
       if (
-        ("setloadoutshuffleenabled" in url.lower()
-        or "markitemseen" in url.lower()) and self.server.app.config.get("EveryCosmetic")
+        ("setloadoutshuffleenabled" in url.lower())
         or 
         url
         == 
@@ -305,15 +315,357 @@ class Addon:
         in 
         url.lower()
       ):
+        logger.info(flow.response.get_text())
         flow.response = http.Response.make(
-          204, b"", {"Content-Type": "text/html"}
+          204,
+          b"", 
+          {"Content-Type": "text/html"}
         )  # Return no body 
-      if (
-        "putmodularcosmetic" in url.lower()
-        or "setloadoutshuffleenabled" in url.lower()
-      ):
-        # Log when cosmetic has been changed
+      
+      if "putmodularcosmetic" in url.lower():
         logger.info("Cosmetic Change Detected.")
+
+        presetMap = {
+          "CosmeticLoadout:LoadoutSchema_Character":"character",
+          "CosmeticLoadout:LoadoutSchema_Emotes": "emotes",
+          "CosmeticLoadout:LoadoutSchema_Platform": "lobby",
+          "CosmeticLoadout:LoadoutSchema_Wraps": "wraps",
+          "CosmeticLoadout:LoadoutSchema_Jam": "jam",
+          "CosmeticLoadout:LoadoutSchema_Sparks": "instruments",
+          "CosmeticLoadout:LoadoutSchema_Vehicle": "sports",
+          "CosmeticLoadout:LoadoutSchema_Vehicle_SUV": "suv",
+        }
+          
+                
+        baseBody = flow.request.get_text()
+        body = ujson.loads(baseBody)
+        loadoutData = ujson.loads(body['loadoutData'])
+        
+        if body.get('presetId') != 0:
+          presetId = body['presetId']
+          
+          slots = loadoutData['slots']
+          presetType = body['loadoutType']
+          
+          configTemplate = {
+            "presetType": presetType,
+            "presetId": presetId,
+            "slots":  slots
+          }
+          
+          with open("config.json") as f:
+            data = ujson.load(f)
+          
+          key = presetMap.get(presetType)
+          
+          if data["saved"]['presets'][key].get(presetId):
+            data["saved"]['presets'][key][presetId] = configTemplate
+          else:
+            data["saved"]['presets'][key].update({str(presetId):configTemplate})
+          
+          self.server.app.athena.update(
+            {
+              f"{presetType} {presetType}": {
+                "attributes" : {
+                  "display_name" : f"PRESET {presetId}",
+                  "slots" : slots
+                },
+                "quantity" : 1,
+                "templateId" : presetType
+              },
+            }
+          )
+          
+          with open(
+            "config.json",
+            "w"
+          ) as f:
+            ujson.dump(data, f,indent=2)
+          
+        try:
+          accountId = url.split("/")[8]
+        except:
+          accountId = "cfd16ec54126497ca57485c1ee1987dc"#SypherPK's ID
+            
+        response = {
+          "profileRevision": 99999,
+          "profileId": "athena",
+          "profileChangesBaseRevision": 99999,
+          "profileCommandRevision": 99999,
+          "profileChanges": [
+            {
+              "changeType": "fullProfileUpdate",
+              "profile": {
+                "created": "",
+                "updated": str(datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'),
+                "rvn": 0,
+                "wipeNumber": 1,
+                "accountId": accountId,
+                "profileId": "athena",
+                "version": "no_version",
+                "items": self.server.app.athena,
+                "stats": {
+                  "loadout_presets": {
+                    "CosmeticLoadout:LoadoutSchema_Character": {},
+                    "CosmeticLoadout:LoadoutSchema_Emotes": {},
+                    "CosmeticLoadout:LoadoutSchema_Platform": {},
+                    "CosmeticLoadout:LoadoutSchema_Wraps": {},
+                    "CosmeticLoadout:LoadoutSchema_Jam": {},
+                    "CosmeticLoadout:LoadoutSchema_Sparks": {},
+                    "CosmeticLoadout:LoadoutSchema_Vehicle": {},
+                    "CosmeticLoadout:LoadoutSchema_Vehicle_SUV": {}
+                  }
+                },
+                "commandRevision": 99999,
+                "profileCommandRevision": 99999,
+                "profileChangesBaseRevision": 99999
+              }
+            }
+          ]
+        }
+        
+        if body.get('presetId') != 0:
+          response['profileChanges'][0]['profile']['stats']['loadout_presets'][presetType].update(
+            {
+              presetId: f"{presetType} {presetId}"
+            }
+          )
+
+        flow.response = http.Response.make(
+          200,
+          ujson.dumps(response),
+          {"Content-Type": "application/json"}
+        )
+          
+      if"/SetItemFavoriteStatusBatch" in url:
+        logger.info(f"Cosmetic favorite detected.")
+
+        text = flow.request.get_text()
+        favData = ujson.loads(text)
+        
+        changeValue = favData['itemFavStatus'][0]
+        itemIds = favData['itemIds']
+        
+        if changeValue:
+          
+          with open("config.json") as f:
+            data = ujson.load(f)
+          
+          for itemId in itemIds:
+            try:
+              if itemId not in data["saved"]["favorite"]:
+                data["saved"]["favorite"].append(itemId)
+              self.server.app.athena[itemId]["attributes"]['favorite'] = True
+            except Exception as e:#Cannot find account id
+              logger.error(e,traceback.format_exc())
+          
+          with open("config.json", "w") as f:
+            ujson.dump(data, f,indent=2) 
+        else:
+          
+          with open("config.json") as f:
+            data = ujson.load(f)
+          
+          for itemId in itemIds:
+            try:
+              if itemId in data["saved"]["favorite"]:
+                data["saved"]["favorite"].remove(itemId)
+              self.server.app.athena[itemId]["attributes"]['favorite'] = False
+            except Exception as e:#Cannot find account id
+              logger.error(e,traceback.format_exc())
+          
+          with open(
+            "config.json",
+            "w"
+          ) as f:
+            ujson.dump(data, f,indent=2)
+        try:
+          accountId = url.split("/")[8]
+        except:
+          accountId = "cfd16ec54126497ca57485c1ee1987dc"#SypherPK's ID
+        
+        response = {
+          "profileRevision": 99999,
+          "profileId": "athena",
+          "profileChangesBaseRevision": 99999,
+          "profileCommandRevision": 99999,
+          "profileChanges": [
+            {
+              "changeType": "fullProfileUpdate",
+              "profile": {
+                "created": "",
+                "updated": str(datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'),
+                "rvn": 0,
+                "wipeNumber": 1,
+                "accountId": accountId,
+                "profileId": "athena",
+                "version": "no_version",
+                "items": self.server.app.athena,
+                "commandRevision": 99999,
+                "profileCommandRevision": 99999,
+                "profileChangesBaseRevision": 99999
+              }
+            }
+          ]
+        }
+        
+
+        
+        flow.response = http.Response.make(
+          200,
+          ujson.dumps(response),
+          {"Content-Type": "application/json"}
+        )
+            
+      if "/SetItemArchivedStatusBatch" in url:
+        logger.info(f"Cosmetic archive detected.")
+
+        text = flow.request.get_text()
+        archiveData = ujson.loads(text)
+        
+        changeValue = archiveData['archived']
+        itemIds = archiveData['itemIds']
+        
+        if changeValue:
+          
+          data = readConfig()
+            
+          for itemId in itemIds:
+            try:
+              self.server.app.athena[itemId]["attributes"]['archived'] = True
+              if itemId not in data['saved']['archived']:
+                data["saved"]["archived"].append(itemId)
+            except Exception as e:#Cannot find account id
+              logger.error(e,traceback.format_exc())
+          
+          with open(
+            "config.json",
+            "w"
+          ) as f:
+            ujson.dump(data, f,indent=2)
+        else:
+          
+          with open("config.json") as f:
+            data = ujson.load(f)
+          
+          for itemId in itemIds:
+            try:
+              self.server.app.athena[itemId]["attributes"]['archived'] = False
+              if itemId not in data["saved"]["archived"]:
+                data["saved"]["archived"].remove(itemId)
+            except Exception as e:#Cannot find account id
+              logger.error(e,traceback.format_exc())
+          
+          with open(
+            "config.json",
+            "w"
+          ) as f:
+            ujson.dump(data,f,indent=2)#You got me moving on that martini blue    
+        
+        try:
+          accountId = url.split("/")[8]
+        except:
+          accountId = "cfd16ec54126497ca57485c1ee1987dc"#SypherPK's ID
+          
+        response = {
+          "profileRevision": 99999,
+          "profileId": "athena",
+          "profileChangesBaseRevision": 99999,
+          "profileCommandRevision": 99999,
+          "profileChanges": [
+            {
+              "changeType": "fullProfileUpdate",
+              "profile": {
+                "created": "",
+                "updated": str(datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'),
+                "rvn": 0,
+                "wipeNumber": 1,
+                "accountId": accountId,
+                "profileId": "athena",
+                "version": "no_version",
+                "items": self.server.app.athena,
+                "commandRevision": 99999,
+                "profileCommandRevision": 99999,
+                "profileChangesBaseRevision": 99999
+              }
+            }
+          ]
+        }
+        
+        flow.response = http.Response.make(
+          200,
+          ujson.dumps(response),
+          {"Content-Type": "application/json"}
+        )      
+      if "#setcosmeticlockerslot" in url.lower():
+        try:
+          accountId = url.split("/")[8]
+        except:
+          accountId = "cfd16ec54126497ca57485c1ee1987dc"#SypherPK's ID
+        
+        baseBody = flow.request.get_text()
+        reqbody = ujson.loads(baseBody)
+        
+        response = {
+          "profileRevision": 99999,
+          "profileId": "athena",
+          "profileChangesBaseRevision": 99999,
+          "profileCommandRevision": 99999,
+          "profileChanges": [
+            {
+              "changeType": "fullProfileUpdate",
+              "profile": {
+                "created": "",
+                "updated": str(datetime.now().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'),
+                "rvn": 0,
+                "wipeNumber": 1,
+                "accountId": accountId,
+                "profileId": "athena",
+                "version": "no_version",
+                "items": self.server.app.athena,
+                "commandRevision": 99999,
+                "profileCommandRevision": 99999,
+                "profileChangesBaseRevision": 99999
+              }
+            }
+          ]
+        } 
+        flow.response = http.Response.make(
+          200,
+          ujson.dumps(response),
+          {"Content-Type": "application/json"}
+        )   
+        
+      if url.lower().startswith("https://fngw-mcp-gc-livefn.ol.epicgames.com/fortnite/api/matchmaking/session/") and "?sessionKey=" in url.lower():
+        text = flow.response.get_text()
+        matchData = ujson.loads(text)
+        
+        matchData['allowInvites'] =  True#Alllow Invites Mid-Game
+        matchData['allowJoinInProgress'] =  True#Join via Profile
+        matchData['allowJoinViaPresence'] =  True#Join via Lobby  
+        
+        matchData['allowJoinViaPresenceFriendsOnly'] =  False#Friends only join
+        matchData['attributes']['ALLOWBROADCASTING_b'] =  False#idk wtf this is
+        matchData['attributes']['ALLOWMIGRATION_s'] =  "true"
+        matchData['attributes']['ALLOWREADBYID_s'] =  "true"
+        matchData['attributes']['CHECKSANCTIONS_s'] =  "false"#Check for any bans
+        matchData['attributes']['REJOINAFTERKICK_s'] =  "OPEN"#Ability to rejoin after kick
+        matchData['attributes']['allowMigration_s'] =  True
+        matchData['attributes']['allowReadById_s'] =  True
+        matchData['attributes']['checkSanctions_s'] =  False
+        matchData['attributes']['rejoinAfterKick_s'] =  True
+        
+        matchData['shouldAdvertise'] =  True
+        matchData['usesPresence'] =  True
+        matchData['usesStats'] =  False
+        matchData['maxPrivatePlayers'] =  999
+        matchData['maxPublicPlayers'] =  999
+        matchData['openPrivatePlayers'] =  999
+        matchData['openPublicPlayers'] =  999
+        
+        
+        flow.response.text = ujson.dumps(matchData)
+      
 
       if  "client/QueryProfile?profileId=athena" in url or "client/QueryProfile?profileId=common_core" in url or "client/ClientQuestLogin?profileId=athena" in url and self.server.app.config.get("EveryCosmetic"):
         text = flow.response.get_text()
@@ -330,8 +682,9 @@ class Addon:
           except KeyError:
             pass
           flow.response.text = ujson.dumps(athenaFinal)
-        except KeyError:
+        except KeyError as e:
           if debug:
+            print(e,traceback.format_exc())
             input(text)
           else:
             pass
@@ -356,7 +709,7 @@ class Addon:
         accountId = url.split("/")[1:]
         flow.request.url = flow.request.url.replace(
           accountId,
-          "4735ce9132924caf8a5b17789b40f79c"#Ninja's AccountID
+          "cfd16ec54126497ca57485c1ee1987dc"#SypherPK's AccountID
         )
 
       if "/fortnite/api/matchmaking/session/" in url.lower() and "/join" in url.lower():
@@ -420,6 +773,7 @@ class Addon:
         input(e)
       else:
         logger.error(e)
+        logger.error(traceback.format_exc())
 
 
 class MitmproxyServer:
@@ -434,17 +788,13 @@ class MitmproxyServer:
       self.running = False
       self.task = None
       self.stopped = asyncio.Event()
-      self.options = mitmoptions(
-        listen_host="127.0.0.1",
-        listen_port=8080,
-        showhost=False,
+      self.m = WebMaster(
+        Options(),
+        with_termlog=False
       )
-      self.m = DumpMaster(
-        options=self.options,
-        with_dumper=False,
-        loop=self.loop,
-        with_termlog=False,
-      )
+      self.m.options.listen_host = "127.0.0.1"
+      self.m.options.listen_port = 1942
+      self.m.options.web_open_browser = False
       self.m.addons.add(Addon(self)) # type: ignore
     except KeyboardInterrupt:
       pass
@@ -455,17 +805,19 @@ class MitmproxyServer:
       set_title(f"{appName} (CTRL+C To Close Proxy)")
       # asyncio.create_task(app.updateRPC(state="Running Proxy"))
       logger.info("Proxy Online")
-      startupTasks = [
-        "taskkill /im FortniteLauncher.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping_BE.exe /F",
-        "taskkill /im FortniteClient-Win64-Shipping.exe /F",
-        "taskkill /im EpicGamesLauncher.exe /F"
-      ]
-      for task in startupTasks:
-        os.system(task+" > NUL 2>&1")
-      self.task = asyncio.create_task(self.m.run())
+      closeFortnite = readConfig()['closeFortnite']
+      if closeFortnite:
+        startupTasks = [
+          "taskkill /im FortniteLauncher.exe /F",
+          "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
+          "taskkill /im FortniteClient-Win64-Shipping_EAC_EOS.exe /F",
+          "taskkill /im FortniteClient-Win64-Shipping_BE.exe /F",
+          "taskkill /im FortniteClient-Win64-Shipping.exe /F",
+          #"taskkill /im EpicGamesLauncher.exe /F"
+        ]
+        for task in startupTasks:
+          os.system(task+" > NUL 2>&1")
+      self.task = self.loop.create_task(self.m.run())
     except KeyboardInterrupt:
       pass
 
@@ -531,7 +883,7 @@ class PirxcyProxy:
       "main.py",
       "requirements.txt"
     ]
-    self.appVersion = semver.Version.parse("2.3.0")
+    self.appVersion = semver.Version.parse("2.4.0")
     self.client_id = client_id
     self.mitmproxy_server = MitmproxyServer(
       app=self,
@@ -543,6 +895,7 @@ class PirxcyProxy:
     self.name = False
     self.nameId = {}
     self.athena = {}
+    self.stats = {}
     self.playlist = False
     self.level = None
     self.battleStars = None
@@ -555,10 +908,10 @@ class PirxcyProxy:
     """
     Async initializer
     """
-    asyncio.create_task(self.connectRPC())
+    self.loop.create_task(self.connectRPC())
     state = "Starting..."
     self.state = state
-    asyncio.create_task(self.updateRPC(state=state))
+    self.loop.create_task(self.updateRPC(state=state))
 
     try:
       async with aiofiles.open(self.configFile) as f:
@@ -742,7 +1095,7 @@ class PirxcyProxy:
   async def buildAthena(self):
     state = "Storing Cosmetics"
     set_title(f"{appName} {state}")
-    asyncio.create_task(self.updateRPC(state=state))
+    self.loop.create_task(self.updateRPC(state=state))
     self.state = state
     cls()
 
@@ -753,6 +1106,7 @@ class PirxcyProxy:
 
     base = {}
 
+    config = readConfig()
     async with aiohttp.ClientSession() as session:
       async with session.get(
         "https://fortniteapi.io/v2/items/list?fields=id,name,styles,type",
@@ -776,11 +1130,11 @@ class PirxcyProxy:
           "quantity": 1,
           "attributes": {
             "creation_time": None,
-            "archived": False,
-            "favorite": False,
+            "archived": True if templateId in config['saved']['archived'] else False,
+            "favorite": True if templateId in config['saved']['favorite'] else False,
             "variants": variants,
-            "item_seen": False,
-            "giftFromAccountId": "4735ce9132924caf8a5b17789b40f79c",
+            "item_seen": True,
+            "giftFromAccountId": "cfd16ec54126497ca57485c1ee1987dc",#SypherPK's Account ID
           },
         }
       }
@@ -856,38 +1210,65 @@ class PirxcyProxy:
           "quantity": 1,
           "attributes": {
             "creation_time": None,
-            "archived": False,
-            "favorite": True if item["id"].lower().startswith("cid_028") else False,
+            "archived": True if templateId in config['saved']['archived'] else False,
+            "favorite": True if templateId in config['saved']['favorite'] else False,
             "variants": variants,
-            "item_seen": False,
+            "item_seen": True,
             "giftFromAccountId": "4735ce9132924caf8a5b17789b40f79c",
           },
         }
       }
       base.update(itemTemplate)
     
-    crownTemplate = {
-      "VictoryCrown_defaultvictorycrown":
-        {
-          "templateId": "VictoryCrown:defaultvictorycrown",
-          "attributes": {
-            "victory_crown_account_data": {
-              "has_victory_crown": True,
-              "data_is_valid_for_mcp": True,
-              "total_victory_crowns_bestowed_count": 500,
-              "total_royal_royales_achieved_count": 1942
+    extraTemplates = [
+      {
+        "VictoryCrown_defaultvictorycrown":
+          {
+            "templateId": "VictoryCrown:defaultvictorycrown",
+            "attributes": {
+              "victory_crown_account_data": {
+                "has_victory_crown": True,
+                "data_is_valid_for_mcp": True,
+                "total_victory_crowns_bestowed_count": 500,
+                "total_royal_royales_achieved_count": 1942
+              },
+              "max_level_bonus": 0,
+              "level": 124,
+              "item_seen": False,
+              "xp": 0,
+              "favorite": False
             },
-            "max_level_bonus": 0,
-            "level": 124,
-            "item_seen": False,
-            "xp": 0,
-            "favorite": False
-          },
-          "quantity": 1
+            "quantity": 1
+          }
+      },
+      {
+        "Currency:MtxPurchased": {
+          "templateId": "Currency:MtxPurchased",
+          "attributes": {"platform": "EpicPC"},
+          "quantity": 10000000
         }
-    }   
-    base.update(crownTemplate)  
-      
+      }
+    ]
+    for template in extraTemplates:
+      base.update(template)  
+
+    config = readConfig()
+    
+    for presetType in config['saved']['presets'].values():
+      for preset in presetType.values():
+        base.update(
+          {
+            f"{preset['presetType']} {preset['presetId']}": {
+              "attributes" : {
+                "display_name" : f"PRESET {preset['presetId']}",
+                "slots" : preset['slots']
+              },
+              "quantity" : 1,
+              "templateId" : preset['presetType']
+            },
+          }
+        )
+    
     total = len(FortniteItems['items']) +len(ThirdPartyItems)
     logger.info(f"Stored {total} cosmetics.")
     self.athena = base
@@ -932,14 +1313,15 @@ class PirxcyProxy:
     match option:
       case "SET_PROXY_TASK":
         if self.running:
-          return self.mitmproxy_server.stop()
-
-        try:
-          self.mitmproxy_server.start()
-          await self.mitmproxy_server.stopped.wait()
-        except:
-          self.running = False
           self.mitmproxy_server.stop()
+
+        else:
+          try:
+            self.mitmproxy_server.start()
+            await self.mitmproxy_server.stopped.wait()
+          except:
+            self.running = False
+            self.mitmproxy_server.stop()
 
       case "SET_NAME_TASK":
         self.name = not self.name
@@ -975,7 +1357,7 @@ class PirxcyProxy:
       case "EXIT_TASK":
         proxy_toggle(enable=False)
         cls()
-        sys.exit(0)
+        sys.exit(1)
       case _: pass
 
   async def checks(self):
@@ -1078,29 +1460,19 @@ class PirxcyProxy:
       text=center(text),
       color=Colors.purple_to_red,
       mode=Colorate.Vertical,
-      interval=0.000100101001,
+      interval=0.0010101011010,
       enter=True
     )
   
-  
-  async def main(self):
-    cls()
-    proxy_toggle(enable=False)
-    await self.checks()
-    await self.intro()
-    await aprint(
-      center(crayons.blue(f"Starting  {appName}...")),
-      delay=0.089 # type: ignore
-    )
-
+  async def menu(self):
     while True:
       state = "Main Menu"
-      asyncio.create_task(self.updateRPC(state="Main Menu"))
+      self.loop.create_task(self.updateRPC(state="Main Menu"))
       self.state = "Main Menu"
       self.title()
 
       choices = self.options()
-      index: int = survey.routines.select( # type: ignore
+      index: int =  survey.routines.select( # type: ignore
         f"Welcome to {appName}\nChoose an option:",
         options=list(choices.keys()),
         focus_mark="➤  ",
@@ -1112,9 +1484,26 @@ class PirxcyProxy:
         error = await self.exec_command(command)
       except Exception as e:
         pass
+  
+  async def main(self):
+    cls()
+    proxy_toggle(enable=False)
+    await self.checks()
+    await self.intro()
+    await aprint(
+      center(crayons.blue(f"Starting  {appName}...")),
+      delay=0.089 # type: ignore
+    )
+    try:
+      await self.menu()
+    except KeyboardInterrupt:
+      await self.menu()
 
-  def run(self):
-    return self.main()
+  async def run(self):
+    try:
+      await self.main()
+    except KeyboardInterrupt:
+      exit()
 
   @staticmethod
   async def new():
@@ -1126,7 +1515,10 @@ class PirxcyProxy:
 if __name__ == "__main__":
 
   async def main():
-    app = await PirxcyProxy.new()
-    await app.run()
+    try:
+      app = await PirxcyProxy.new()
+      await app.run()
+    except:
+      print(traceback.format_exc())
 
   asyncio.run(main())
