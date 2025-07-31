@@ -4,7 +4,7 @@
     "closeFortnite": false,
     "Playlist": "playlist_nobuildbr_squad",
     "WebSocketLogging": false,
-    "updateSkip": false,
+    "updateSkip": true,
     "InviteExploit": {
       "enabled": true,
       "users": [
